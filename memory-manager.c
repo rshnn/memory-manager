@@ -12,6 +12,7 @@ void* myallocate(int size, char* FILE, int LINE){}
 void* mydellocate(void* ptr){}
 
 
+
 void intializeSwapSpace(){
 
 	swap_file = fopen("swagmaster.swp", "w+");
