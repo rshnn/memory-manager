@@ -27,14 +27,12 @@
 
 
 
-
-
 /************************************************************************************************************
 *
 *    MEMORY-MANAGER DATA STRUCTURES
 *
 ************************************************************************************************************/
-	
+    
 
 typedef struct memEntry_{
 
@@ -49,11 +47,11 @@ typedef struct memEntry_{
 
 typedef struct page_table_entry_{
 
-    unsigned int    used:1;              	// Is the page currently used 
-    unsigned int    resident:1;           	// Is the page resident in memory 
+    unsigned int    used:1;                 // Is the page currently used 
+    unsigned int    resident:1;             // Is the page resident in memory 
     unsigned int    left_dependent:1;       // Do we need to load the next page
     unsigned int    right_dependent:1; 
-    unsigned int 	dirty:1;				// Indicates if the page has been written to (i.e needs to be writen back to memory when evicted)
+    unsigned int    dirty:1;                // Indicates if the page has been written to (i.e needs to be writen back to memory when evicted)
     unsigned int    UNUSED:3;
     unsigned int    largest_available:12;   // Size of largest fragment availble inside the page
     unsigned int    page_number:12;         // Offset of page in memory (if it is loaded)
@@ -70,8 +68,11 @@ typedef struct page_table_entry_{
 *
 ************************************************************************************************************/
 
-// Refer to bit-operations-examples.c 
-// Or some link posted in slack
+/* memEntry is 32 bits */
+#define makeMemEntry(valid, isfree, right_dependent, request_size) \
+    (struct memEntry_){ valid, isfree, right_dependent, 0, \
+        request_size & 0x7fffff}
+
 
 
 /************************************************************************************************************

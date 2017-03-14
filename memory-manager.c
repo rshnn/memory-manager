@@ -22,11 +22,28 @@ void intializeSwapSpace(){
 
 }
 
+ 
+ /* Converts an integer to binary (binary represented as integer) */
+int binary_conversion(int num){
+    if (num == 0)
+        return 0;
+    else
+        return (num % 2) + 10 * binary_conversion(num / 2);
+}
+
+
+
 
 
 int main(){
 
-	intializeSwapSpace();
+	// intializeSwapSpace();
+	int test = 3824;
+
+	memEntry testing = makeMemEntry(0, 1, 1, test);
+
+	printf("%i in binary is:\t\t%i\n", test, binary_conversion(test));
+	printf("Is request size correct? \t%i\n", binary_conversion(testing.request_size));
 
 }
 
