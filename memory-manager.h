@@ -62,6 +62,12 @@ typedef struct PTEntry_{
 }PTEntry;
 
 
+typedef struct mem_bookkeeper_{
+    unsigned int    TID:8;
+    unsigned int    page_number: 12;
+}mem_bookkeeper;
+
+
 
 
 /************************************************************************************************************

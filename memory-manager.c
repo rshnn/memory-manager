@@ -2,7 +2,8 @@
 
 
 // GLOBALS 
-PTEntry* super_page_array[32]; 		// page table of page tables 
+PTEntry* 		super_page_array[32]; 		// page table of page tables
+mem_bookkeeper* book_keeper[4096];		// TODO:  Make this dyanmic.  Replace 4096
 char 	memory[2 << 22];          	// main memory. char is 1 bytes.  Need 8MM 
 FILE* 	swap_file;
 
