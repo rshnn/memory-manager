@@ -54,6 +54,17 @@ int main(){
 
     printf("%i\t%i\t%i\t%i\n", getValidBit(addr), getIsFreeBit(addr), getRightDepBit(addr), getRequestSize(addr));
 
+	/*
+    User's Virtual Address:   1111 1111 1111 1111 1000 0001 0010 0011
+                            = 0xFFFF8123
+
+    valid is 1 
+    isfree is 1 
+    right_dep is 1 
+    request_size is 8356131 (right most 23)
+    */
+
+
 
 	//_printMemEntry(&testing);
 }

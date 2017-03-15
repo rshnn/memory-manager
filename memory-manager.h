@@ -27,6 +27,24 @@
 
 
 
+/*
+
+    // A virtual address 'la' has a three-part structure as follows:
+    //
+    // +---------5-------+--------12---------+------3------+----12----+
+    // |   SPT Index     |     Page Number   |   GARBAGE   | Offset   |
+    // |                 |                   |             |          |
+    // +-----------------+-------------------+-------------+----------+
+
+
+    // 5 SPT Index     : 32 SPT Entries 
+    // 12 PN           : 4096 Total pages 
+    // 12 Offset       : 4096 Size of Page 
+
+
+*/
+
+
 /************************************************************************************************************
 *
 *    MEMORY-MANAGER DATA STRUCTURES
@@ -79,12 +97,22 @@ typedef struct PTEntry_{
         largest_available, page_number}
 
 
-
+//for memEntry
 #define getValidBit(va) ((va & 0x80000000)>>31)
 #define getIsFreeBit(va) ((va & 0x40000000)>>30)
 #define getRightDepBit(va) ((va & 0x20000000)>>29)
 #define getRequestSize(va) (va & 0x007FFFFF)
 
+
+//for page table entry
+#define getUsedBit(va) ((va & 0x80000000)>>31)
+#define getResidentBit(va) ((va & 0x40000000)>>30)
+#define getLeftDependentBit(va) ((va & 0x20000000)>>29)
+#define getRightDependentBit(va) ((va & 0x10000000)>>28)
+#define getDirtyBit(va) ((va & 0x08000000)>>27)
+#define getUnusedBit(va) ((va & 0x07000000)>>24) //unused
+#define getLargestAvailable_Bit(va) ((va & 0x00000088))
+#define getPageNumber(va) ((va & 0x000000C))
 
 /************************************************************************************************************
 *
