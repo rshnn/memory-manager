@@ -15,11 +15,6 @@ void* myallocate(int size, char* FILE, int LINE){
 
 
 
-
-	memEntry new = makeMemEntry(1, 0, 0, size);
-
-
-
 }
 
 
@@ -58,7 +53,17 @@ void _printMemEntry(int header){
 
 }
 
-
+/**
+*	Private Helper Function
+* 		Prints a user virtual address.
+*		Input:  32-bit addr as integer. 	
+*			addr{	
+*					8:	TID,
+*					12:	page number
+*					12:	offset
+*			}
+*
+*/
 void _printVirtualAddr(int addr){
     printf(ANSI_COLOR_MAGENTA "virt_addr:\t%x\t[TID: %i\tPN: %i\toff: %i]\n" ANSI_COLOR_RESET, \
     	addr, getTIDVA(addr), getPageNumberVA(addr), getOffsetVA(addr));
@@ -66,10 +71,25 @@ void _printVirtualAddr(int addr){
 }
 
 
-
+/**
+*	Private Helper Function
+* 		Prints a page table entry.
+*		Input:  32-bit entry as integer. 	
+*			entry{	
+*					1:	used,
+*					1:	resident,
+*					1:	left_dep,
+*					1:	right_dep,
+*					1:	dirty,
+*					3:	unused
+*					12:	largest_avail,
+*					12: page_number
+*			}
+*
+*/
 void _printPageTableEntry(int entry){
 
-	printf(ANSI_COLOR_MAGENTA"PTEntry: \t%x\t[%i %i %i %i %i %i %i] "ANSI_COLOR_RESET, \
+	printf(ANSI_COLOR_MAGENTA"PTEntry: \t%x\t[u:%i |r:%i |ld:%i |rd:%i |d:%i |la:%i |pn: %i]\n" ANSI_COLOR_RESET, \
 		entry, getUsedBitPT(entry), getResidentBitPT(entry), getLeftDependentBitPT(entry), \
 		getRightDependentBitPT(entry), getDirtyBitPT(entry), getLargestAvailable_BitPT(entry), \
 		getPageNumberPT(entry));
@@ -101,8 +121,8 @@ int main(){
     */
 
 
-	// _printVirtualAddr(addr);
+	_printVirtualAddr(addr);
 	_printPageTableEntry(addr2);
-	// _printMemEntry(addr);
+	_printMemEntry(addr);
 }
 

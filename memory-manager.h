@@ -26,28 +26,6 @@
 // #define free(x) myfree(x, __FILE__, __LINE__);
 
 
-// virtual_addr 
-// +---------8-------+--------12---------+--------12--------+
-// |        TID      |     Page Number   |      Offset      |
-// |                 |                   |                  |
-// +-----------------+-------------------+------------------+
-//
-// 8 TID           : 256 SPT Entries 
-// 12 PN           : 4096 Total pages 
-// 12 Offset       : 4096 Size of Page 
-
-
-
-
-//  OLD
-// +---------5-------+--------12---------+------3------+----12----+
-// |   SPT Index     |     Page Number   |   GARBAGE   | Offset   |
-// |                 |                   |             |          |
-// +-----------------+-------------------+-------------+----------+
-//
-// 5 SPT Index     : 32 SPT Entries 
-// 12 PN           : 4096 Total pages 
-// 12 Offset       : 4096 Size of Page 
 
 
 
@@ -58,15 +36,15 @@
 ************************************************************************************************************/
     
 /* To Remove.  Obsolete */
-typedef struct memEntry_{
+// typedef struct memEntry_{
 
-    unsigned int    valid: 1;
-    unsigned int    isfree:1;
-    unsigned int    right_dependent:1; 
-    unsigned int    UNUSED:6;
-    unsigned int    request_size:23;        // Max size is 8388608 (8MB)
+//     unsigned int    valid: 1;
+//     unsigned int    isfree:1;
+//     unsigned int    right_dependent:1; 
+//     unsigned int    UNUSED:6;
+//     unsigned int    request_size:23;        // Max size is 8388608 (8MB)
 
-}memEntry;
+// }memEntry;
 
 
 typedef struct PTEntry_{
@@ -92,10 +70,10 @@ typedef struct PTEntry_{
 *
 ************************************************************************************************************/
 
-/* memEntry is 32 bits */
-/* REMOVE.  Obsolete. */
-#define makeMemEntry(valid, isfree, right_dependent, request_size) \
-    (struct memEntry_){ valid, isfree, right_dependent, 0, request_size}
+// /* memEntry is 32 bits */
+// /* REMOVE.  Obsolete. */
+// #define makeMemEntry(valid, isfree, right_dependent, request_size) \
+//     (struct memEntry_){ valid, isfree, right_dependent, 0, request_size}
 
 /* PTEntry is 32 bits */
 #define makePTEntry(used, resident, left_dependent, right_dependent, \
@@ -134,7 +112,6 @@ typedef struct PTEntry_{
 
 
 //for page table entry 
-/* NOTE: UNTESTED SOME1 PLS TEST THIS */
 #define getUsedBitPT(entry) ((entry & 0x80000000)>>31)
 #define getResidentBitPT(entry) ((entry & 0x40000000)>>30)
 #define getLeftDependentBitPT(entry) ((entry & 0x20000000)>>29)
