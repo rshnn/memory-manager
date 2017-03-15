@@ -3,7 +3,7 @@
 
 // GLOBALS 
 PTEntry* super_page_array[32]; 		// page table of page tables 
-char 	memory[2 << 22];          					// main memory. char is 1 bytes.  Need 8MM 
+char 	memory[2 << 22];          	// main memory. char is 1 bytes.  Need 8MM 
 FILE* 	swap_file;
 
 
@@ -37,12 +37,27 @@ void intializeSwapSpace(){
 }
 
 
-void _printMemEntry(memEntry* x){
+/**
+*	Private Helper Function
+* 		Prints a memEntry header.
+*		Input:  32-bit header as integer. 	
+*			header{	
+*					1:	valid,
+*					1:	isfree,
+*					1:	right_dependent
+*					6:	unused
+*					23:	request size
+*			}
+*
+*/
+void _printMemEntry(int header){
 
-	printf(ANSI_COLOR_MAGENTA "v: %i | f: %i | r: %i | size: %i\n" ANSI_COLOR_RESET,
-				 x->valid, x->isfree, x->right_dependent, x->request_size);
+    printf(ANSI_COLOR_MAGENTA"addr: %x:\t[v: %i | f: %i | rdep: %i | req_size: %i]\n"\
+    	ANSI_COLOR_RESET, header, getValidBitME(header), getIsFreeBitME(header), \
+    	getRightDepBitME(header), getRequestSizeME(header));
 
 }
+
 
 
 
@@ -52,7 +67,6 @@ int main(){
 
     int addr = 0xFFFF8123;
 
-    printf("%i\t%i\t%i\t%i\n", getValidBit(addr), getIsFreeBit(addr), getRightDepBit(addr), getRequestSize(addr));
 
 	/*
     User's Virtual Address:   1111 1111 1111 1111 1000 0001 0010 0011
@@ -66,6 +80,6 @@ int main(){
 
 
 
-	//_printMemEntry(&testing);
+	_printMemEntry(addr);
 }
 

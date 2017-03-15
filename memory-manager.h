@@ -26,23 +26,29 @@
 // #define free(x) myfree(x, __FILE__, __LINE__);
 
 
-
-/*
-
-    // A virtual address 'la' has a three-part structure as follows:
-    //
-    // +---------5-------+--------12---------+------3------+----12----+
-    // |   SPT Index     |     Page Number   |   GARBAGE   | Offset   |
-    // |                 |                   |             |          |
-    // +-----------------+-------------------+-------------+----------+
-
-
-    // 5 SPT Index     : 32 SPT Entries 
-    // 12 PN           : 4096 Total pages 
-    // 12 Offset       : 4096 Size of Page 
+// virtual_addr 
+// +---------8-------+--------12---------+--------12--------+
+// |        TID      |     Page Number   |      Offset      |
+// |                 |                   |                  |
+// +-----------------+-------------------+------------------+
+//
+// 8 TID           : 256 SPT Entries 
+// 12 PN           : 4096 Total pages 
+// 12 Offset       : 4096 Size of Page 
 
 
-*/
+
+
+//  OLD
+// +---------5-------+--------12---------+------3------+----12----+
+// |   SPT Index     |     Page Number   |   GARBAGE   | Offset   |
+// |                 |                   |             |          |
+// +-----------------+-------------------+-------------+----------+
+//
+// 5 SPT Index     : 32 SPT Entries 
+// 12 PN           : 4096 Total pages 
+// 12 Offset       : 4096 Size of Page 
+
 
 
 /************************************************************************************************************
@@ -51,7 +57,7 @@
 *
 ************************************************************************************************************/
     
-
+/* To Remove.  Obsolete */
 typedef struct memEntry_{
 
     unsigned int    valid: 1;
@@ -69,9 +75,9 @@ typedef struct PTEntry_{
     unsigned int    resident:1;             // Is the page resident in memory 
     unsigned int    left_dependent:1;       // Do we need to load the next page
     unsigned int    right_dependent:1; 
-    unsigned int    dirty:1;                // Indicates if the page has been written to (i.e needs to be writen back to memory when evicted)
+    unsigned int    dirty:1;                // Indicates if the page has been written to (i.e needs to be written back to memory when evicted)
     unsigned int    UNUSED:3;
-    unsigned int    largest_available:12;   // Size of largest fragment availble inside the page
+    unsigned int    largest_available:12;   // Size of largest fragment available inside the page
     unsigned int    page_number:12;         // Offset of page in memory (if it is loaded)
 
 
@@ -87,6 +93,7 @@ typedef struct PTEntry_{
 ************************************************************************************************************/
 
 /* memEntry is 32 bits */
+/* REMOVE.  Obsolete. */
 #define makeMemEntry(valid, isfree, right_dependent, request_size) \
     (struct memEntry_){ valid, isfree, right_dependent, 0, request_size}
 
@@ -96,23 +103,45 @@ typedef struct PTEntry_{
         used, resident, left_dependent, right_dependent, dirty, 0, \
         largest_available, page_number}
 
+//for virtual_addresses
+// A virtual address has a three-part structure as follows:
+// +---------8-------+--------12---------+--------12--------+
+// |        TID      |     Page Number   |      Offset      |
+// |                 |                   |                  |
+// +-----------------+-------------------+------------------+
+//
+// 8 TID           : 256 SPT Entries 
+// 12 PN           : 4096 Total pages 
+// 12 Offset       : 4096 Size of Page 
+// #define get
+// #define 
+
+
 
 //for memEntry
-#define getValidBit(va) ((va & 0x80000000)>>31)
-#define getIsFreeBit(va) ((va & 0x40000000)>>30)
-#define getRightDepBit(va) ((va & 0x20000000)>>29)
-#define getRequestSize(va) (va & 0x007FFFFF)
+// +------1-------+-------1------+------1------+----6----+------23-----------+
+// |     valid    |     isfree   |   right_dep | GARBAGE |  request_size     |
+// |              |              |             |         |                   |
+// +--------------+--------------+-------------+---------+-------------------+
+//
+// 23 request_size  : max request size is 8388608 (8MB) 
+
+#define getValidBitME(header) ((header & 0x80000000)>>31)
+#define getIsFreeBitME(header) ((header & 0x40000000)>>30)
+#define getRightDepBitME(header) ((header & 0x20000000)>>29)
+#define getRequestSizeME(header) (header & 0x007FFFFF)
 
 
-//for page table entry
-#define getUsedBit(va) ((va & 0x80000000)>>31)
-#define getResidentBit(va) ((va & 0x40000000)>>30)
-#define getLeftDependentBit(va) ((va & 0x20000000)>>29)
-#define getRightDependentBit(va) ((va & 0x10000000)>>28)
-#define getDirtyBit(va) ((va & 0x08000000)>>27)
-#define getUnusedBit(va) ((va & 0x07000000)>>24) //unused
-#define getLargestAvailable_Bit(va) ((va & 0x00000088))
-#define getPageNumber(va) ((va & 0x000000C))
+//for page table entry 
+/* NOTE: UNTESTED SOME1 PLS TEST THIS */
+#define getUsedBitPT(entry) ((entry & 0x80000000)>>31)
+#define getResidentBitPT(entry) ((entry & 0x40000000)>>30)
+#define getLeftDependentBitPT(entry) ((entry & 0x20000000)>>29)
+#define getRightDependentBitPT(entry) ((entry & 0x10000000)>>28)
+#define getDirtyBitPT(entry) ((entry & 0x08000000)>>27)
+#define getUnusedBitPT(entry) ((entry & 0x07000000)>>24) //unused
+#define getLargestAvailable_BitPT(entry) ((entry & 0x00000088))
+#define getPageNumberPT(entry) ((entry & 0x000000C))
 
 /************************************************************************************************************
 *
@@ -124,7 +153,6 @@ typedef struct PTEntry_{
 void* scheduler_malloc(int size, int TID);
 void* myallocate(int size, char* FILE, int LINE);
 void* mydellocate(void* ptr);
-
 
 
 #endif
