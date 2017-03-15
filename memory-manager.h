@@ -113,8 +113,9 @@ typedef struct PTEntry_{
 // 8 TID           : 256 SPT Entries 
 // 12 PN           : 4096 Total pages 
 // 12 Offset       : 4096 Size of Page 
-// #define get
-// #define 
+#define getTIDVA(va) ((va & 0xFF000000)>> 24)
+#define getPageNumberVA(va) ((va & 0x00FFF000) >> 12)
+#define getOffsetVA(va) (va & 0x00000FFF)
 
 
 
@@ -140,8 +141,8 @@ typedef struct PTEntry_{
 #define getRightDependentBitPT(entry) ((entry & 0x10000000)>>28)
 #define getDirtyBitPT(entry) ((entry & 0x08000000)>>27)
 #define getUnusedBitPT(entry) ((entry & 0x07000000)>>24) //unused
-#define getLargestAvailable_BitPT(entry) ((entry & 0x00000088))
-#define getPageNumberPT(entry) ((entry & 0x000000C))
+#define getLargestAvailable_BitPT(entry) ((entry & 0x00FFF000)>>12)
+#define getPageNumberPT(entry) ((entry & 0x00000FFF))
 
 /************************************************************************************************************
 *

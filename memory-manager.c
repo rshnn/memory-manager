@@ -52,9 +52,27 @@ void intializeSwapSpace(){
 */
 void _printMemEntry(int header){
 
-    printf(ANSI_COLOR_MAGENTA"addr: %x:\t[v: %i | f: %i | rdep: %i | req_size: %i]\n"\
+    printf(ANSI_COLOR_MAGENTA"ME_header: \t%x\t[v: %i | f: %i | rdep: %i | req_size: %i]\n"\
     	ANSI_COLOR_RESET, header, getValidBitME(header), getIsFreeBitME(header), \
     	getRightDepBitME(header), getRequestSizeME(header));
+
+}
+
+
+void _printVirtualAddr(int addr){
+    printf(ANSI_COLOR_MAGENTA "virt_addr:\t%x\t[TID: %i\tPN: %i\toff: %i]\n" ANSI_COLOR_RESET, \
+    	addr, getTIDVA(addr), getPageNumberVA(addr), getOffsetVA(addr));
+
+}
+
+
+
+void _printPageTableEntry(int entry){
+
+	printf(ANSI_COLOR_MAGENTA"PTEntry: \t%x\t[%i %i %i %i %i %i %i] "ANSI_COLOR_RESET, \
+		entry, getUsedBitPT(entry), getResidentBitPT(entry), getLeftDependentBitPT(entry), \
+		getRightDependentBitPT(entry), getDirtyBitPT(entry), getLargestAvailable_BitPT(entry), \
+		getPageNumberPT(entry));
 
 }
 
@@ -66,11 +84,15 @@ int main(){
 	intializeSwapSpace();
 
     int addr = 0xFFFF8123;
+    int addr2 = 0xAAFF8123;
 
 
 	/*
     User's Virtual Address:   1111 1111 1111 1111 1000 0001 0010 0011
                             = 0xFFFF8123
+
+					addr2 = 1010 1010 1111 1111 1000 0001 0010 0011	
+
 
     valid is 1 
     isfree is 1 
@@ -79,7 +101,8 @@ int main(){
     */
 
 
-
-	_printMemEntry(addr);
+	// _printVirtualAddr(addr);
+	_printPageTableEntry(addr2);
+	// _printMemEntry(addr);
 }
 
