@@ -40,12 +40,12 @@ typedef struct memEntry_{
     unsigned int    isfree:1;
     unsigned int    right_dependent:1; 
     unsigned int    UNUSED:6;
-    unsigned int    request_size:23;
+    unsigned int    request_size:23;        // Max size is 8388608 (8MB)
 
 }memEntry;
 
 
-typedef struct page_table_entry_{
+typedef struct PTEntry_{
 
     unsigned int    used:1;                 // Is the page currently used 
     unsigned int    resident:1;             // Is the page resident in memory 
@@ -57,7 +57,7 @@ typedef struct page_table_entry_{
     unsigned int    page_number:12;         // Offset of page in memory (if it is loaded)
 
 
-}page_table_entry;
+}PTEntry;
 
 
 
@@ -70,9 +70,20 @@ typedef struct page_table_entry_{
 
 /* memEntry is 32 bits */
 #define makeMemEntry(valid, isfree, right_dependent, request_size) \
-    (struct memEntry_){ valid, isfree, right_dependent, 0, \
-        request_size & 0x7fffff}
+    (struct memEntry_){ valid, isfree, right_dependent, 0, request_size}
 
+/* PTEntry is 32 bits */
+#define makePTEntry(used, resident, left_dependent, right_dependent, \
+        dirty, largest_available, page_number) (struct PTEntry_){ \
+        used, resident, left_dependent, right_dependent, dirty, 0, \
+        largest_available, page_number}
+
+
+
+#define getValidBit(va) ((va & 0x80000000)>>31)
+#define getIsFreeBit(va) ((va & 0x40000000)>>30)
+#define getRightDepBit(va) ((va & 0x20000000)>>29)
+#define getRequestSize(va) (va & 0x007FFFFF)
 
 
 /************************************************************************************************************
