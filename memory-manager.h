@@ -1,3 +1,9 @@
+/****************************************************************************
+*
+* memory-manager.h
+*
+****************************************************************************/
+
 #ifndef MEMORY_MANAGER_H
 
 #define MEMORY_MANAGER_H
@@ -36,7 +42,7 @@
 *    MEMORY-MANAGER DATA STRUCTURES
 *
 ************************************************************************************************************/
-    
+
 
 
 typedef struct PTEntry_{
@@ -59,8 +65,9 @@ typedef struct PTEntry_{
     Up to 32 can be made for a thread.  (128*32) = 4096 total possible pages   
 */
 typedef struct PTBlock_{
-    struct PTEntry_ PTblock[128];
-    unsigned int    TID:8;
+    struct PTEntry_ PTblock[128];           // The block of PTEntries 
+    unsigned int    TID:8;                  // TID of owning thread
+    unsigned int    blockID;                // ID number of block (0 indexed)
 }PTBlock;
 
 
@@ -72,6 +79,14 @@ typedef struct SuperPTArray_{
 }SuperPTArray;
 
 
+typedef struct ThrMemInfo_{
+
+    unsigned int    TID;                    // TID of thread
+    unsigned int    num_blocks;             // Number of PTBlocks it owns
+    unsigned int    num_pages;              // Number of PTEntries it uses
+    struct SuperPTArray_* SPTArray;         // Pointer to thread's SuperPTArray
+
+}ThrMemInfo;
 
 /*
     A record of who's page is currently sitting in memory.

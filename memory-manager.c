@@ -1,4 +1,8 @@
-
+/****************************************************************************
+*
+* memory-manager.c
+*
+****************************************************************************/
 #include "memory-manager.h"
 
 
@@ -6,6 +10,7 @@ char** 			memory;				// main memory.  An array of char ptrs
 MemBook* 		book_keeper;		// An array of MemBooks.  Keeps records of memory
 SuperPTArray*	SPT_library;		// Array of SPA's. One for each thread (index = TID)
 FILE* 			swap_file;			// swap file. 
+ThrMemInfo** 	thread_list;		// Array of ThrMemInfo ptrs for all threads 
 
 
 int 	MEMORY_SIZE 	= 2<<22;	// 8MB  (8388608 bytes)
@@ -19,6 +24,17 @@ int 	MAX_THREADS 	= 0;		// Dynamically populated in init(). 8 for PS=4096
 int 	initialized 	= 0;		// Boolean to check if mem-manger is init'ed
 
 
+/****************************************************************************
+****************************************************************************
+*							HELPER FUNCTIONS
+****************************************************************************
+****************************************************************************/
+
+/**
+*	Helper Function
+*		Initializes all the structures needed to manage memory:
+*			memory, book_keeper, SPT_library, swap_file
+*/
 void initMemoryManager(){
 
 
@@ -52,7 +68,7 @@ void initMemoryManager(){
 		// boundary.
 		memory[i] = (char*) memalign(PAGE_SIZE, PAGE_SIZE);
 	}
-	
+
 
 
 	/****************************************************************************
@@ -69,7 +85,7 @@ void initMemoryManager(){
 
 
 	/****************************************************************************
-	*			INIT SPT_LIBRARY
+	*			INIT SuperPTLIBRARY
 	*
 	****************************************************************************/	
 	/* Each thread gets a SuperPTArray */
@@ -85,6 +101,18 @@ void initMemoryManager(){
 
 
 	/****************************************************************************
+	*			INIT THREAD_LIST
+	*
+	****************************************************************************/	
+	/* One ThrMemInfo struct ptr per thread.  The structs is NOT allocated here. */
+	thread_list = (ThrMemInfo**)malloc(MAX_THREADS * sizeof(ThrMemInfo*));
+	/* Init all the pointers to NULL.  They will be populated by makeThrMemInfo() */
+	for(i=0; i<MAX_THREADS; i++){
+		thread_list[i] = NULL;
+	}
+
+
+	/****************************************************************************
 	*			INIT SWAP_SPACE
 	*
 	****************************************************************************/	
@@ -93,39 +121,8 @@ void initMemoryManager(){
 	rewind(swap_file);
 
 
-
 	initialized = 1;
 }
-
-
-
-
-
-
-
-
-void* scheduler_malloc(int size, int TID){return 0;}
-
-
-void* myallocate(int size, char* FILE, int LINE){
-
-	if(initialized == 0)
-		initMemoryManager();
-
-
-	return 0;
-}
-
-
-void* mydellocate(void* ptr){return 0;}
-
-
-
-
-
-
-
-
 
 
 /**
@@ -150,7 +147,83 @@ int buildMemEntry(int valid, int isfree, int left_dep, int request_size){
 
 
 /**
-*	Private Helper Function
+*	Helper Function
+*		Builds a new empty ThrMemInfo struct.  
+* 			Saves a pointer to respective index in thread_list
+* 		Input:  TID of owning thread
+*/
+void buildThrMemInfo(int tid){
+
+	ThrMemInfo* temp 	= (ThrMemInfo*)malloc(sizeof(ThrMemInfo));
+	temp->TID 			= tid;
+	temp->num_blocks 	= 0;
+	temp->num_pages 	= 0;
+	thread_list[tid] 	= temp;
+}
+
+
+/**
+*	Helper Function
+*		Builds a new empty PTBlock.
+* 		Input:  ThrMemInfo of owning thread
+*/
+PTBlock* buildPTBlock(ThrMemInfo* thread){
+
+	PTBlock* block 	= (PTBlock*)malloc(sizeof(PTBlock));
+	block->TID 		= thread->TID;
+
+	block->blockID 	= thread->num_blocks;
+	thread->num_blocks++;
+
+	return block;
+}
+
+
+
+
+
+
+
+
+
+/****************************************************************************
+****************************************************************************
+*							LIBRARY FUNCTIONS
+****************************************************************************
+****************************************************************************/
+
+void* scheduler_malloc(int size, int TID){return 0;}
+
+
+void* myallocate(int size, char* FILE, int LINE){
+
+	if(initialized == 0)
+		initMemoryManager();
+
+
+	return 0;
+}
+
+
+void* mydellocate(void* ptr){return 0;}
+
+
+
+
+
+
+
+
+
+/****************************************************************************
+****************************************************************************
+*							DEBUGGING FUNCTIONS
+****************************************************************************
+****************************************************************************/
+
+
+/**
+*	Private Debugging Function
 * 		Prints a memEntry header.
 *		Input:  32-bit header as integer. 	
 *			header{	
@@ -175,7 +248,7 @@ void _printMemEntry(int header){
 
 
 /**
-*	Private Helper Function
+*	Private Debugging Function
 * 		Prints a page table entry.
 *		Input:  32-bit entry as integer. 	
 *			entry{	
@@ -207,7 +280,6 @@ int main(){
 
 
     initMemoryManager();
-
 
 
 
