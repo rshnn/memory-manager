@@ -35,16 +35,6 @@
 *
 ************************************************************************************************************/
     
-/* To Remove.  Obsolete */
-// typedef struct memEntry_{
-
-//     unsigned int    valid: 1;
-//     unsigned int    isfree:1;
-//     unsigned int    right_dependent:1; 
-//     unsigned int    UNUSED:6;
-//     unsigned int    request_size:23;        // Max size is 8388608 (8MB)
-
-// }memEntry;
 
 
 typedef struct PTEntry_{
@@ -62,10 +52,10 @@ typedef struct PTEntry_{
 }PTEntry;
 
 
-typedef struct mem_bookkeeper_{
+typedef struct mem_book_{
     unsigned int    TID:8;
     unsigned int    page_number: 12;
-}mem_bookkeeper;
+}mem_book;
 
 
 
@@ -76,30 +66,11 @@ typedef struct mem_bookkeeper_{
 *
 ************************************************************************************************************/
 
-// /* memEntry is 32 bits */
-// /* REMOVE.  Obsolete. */
-// #define makeMemEntry(valid, isfree, right_dependent, request_size) \
-//     (struct memEntry_){ valid, isfree, right_dependent, 0, request_size}
-
 /* PTEntry is 32 bits */
 #define makePTEntry(used, resident, left_dependent, right_dependent, \
         dirty, largest_available, page_number) (struct PTEntry_){ \
         used, resident, left_dependent, right_dependent, dirty, 0, \
         largest_available, page_number}
-
-//for virtual_addresses
-// A virtual address has a three-part structure as follows:
-// +---------8-------+--------12---------+--------12--------+
-// |        TID      |     Page Number   |      Offset      |
-// |                 |                   |                  |
-// +-----------------+-------------------+------------------+
-//
-// 8 TID           : 256 SPT Entries 
-// 12 PN           : 4096 Total pages 
-// 12 Offset       : 4096 Size of Page 
-#define getTIDVA(va) ((va & 0xFF000000)>> 24)
-#define getPageNumberVA(va) ((va & 0x00FFF000) >> 12)
-#define getOffsetVA(va) (va & 0x00000FFF)
 
 
 
@@ -132,7 +103,6 @@ typedef struct mem_bookkeeper_{
 *    MEMORY-MANAGER FUNCTION LIBRARY
 *
 ************************************************************************************************************/
-
 
 void* scheduler_malloc(int size, int TID);
 void* myallocate(int size, char* FILE, int LINE);
