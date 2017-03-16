@@ -31,7 +31,7 @@ void initMemoryManager(){
 
 
 
-	printf("%d\n", STACK_SIZE+sizeof(ucontext_t));
+	printf("Total size of ucontext+stack: %d\n", STACK_SIZE+sizeof(ucontext_t));
 	printf("%d\n", MAX_THREADS);
 
 	/****************************************************************************
