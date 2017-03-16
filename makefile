@@ -4,7 +4,7 @@ CC = gcc
 # -m32 	32-bit mode 
 # -O0	No optimization option  
 # -g 	Enable gdb debugging 
-CFLAGS 		= -m32 -O0
+CFLAGS 		= -m32 -O0 -Wall
 DEBUGGER 	= -g
 
 SOURCE 		= memory-manager.c memory-manager.h

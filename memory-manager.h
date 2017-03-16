@@ -2,8 +2,9 @@
 
 #define MEMORY_MANAGER_H
 
-#include <stdio.h>
 #include <stdlib.h>
+#include <stdio.h>
+#include <malloc.h>
 #include <unistd.h>
 #include <ucontext.h> 
 #include <errno.h>

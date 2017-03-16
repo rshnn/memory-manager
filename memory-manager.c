@@ -2,42 +2,82 @@
 
 
 // GLOBALS 
-PTEntry* 	super_page_array[32]; 	// page table of page tables
-mem_book* 	book_keeper[4096];		// TODO:  Make this dyanmic.  Replace 4096
-char* 	memory;	//[2 << 22];          		// main memory. char is 1 bytes.  Need 8MB 
-FILE* 	swap_file;
+char 		library; 				// Container for super_page_tables for each thread
+mem_book* 	book_keeper;			// An array of mem_books.  Keeps records of memory
+char* 		memory;					// main memory.  An array of char ptrs
+FILE* 		swap_file;				// swap file. 
 
-int 	PAGE_SIZE 	= 0;			// Dynamically populated in init() 
+int 	MEMORY_SIZE = 2<<22;		// 8MB  (8388608 bytes)
+int 	SWAP_SIZE	= 2<<23; 		// 16MB (16777216 bytes)
+int 	PAGE_SIZE 	= 0;			// Dynamically populated in init(). ~4096 bytes
+int 	PAGES_IN_MEMORY = 0;		// Dynamically populated in init(). 2048 for PS=4096
+int 	PAGES_IN_SWAP 	= 0;		// Dynamically populated in init(). 4096 for PS=4096
+
+int 	STACK_SIZE 		= 128; 		// Size of a thread's stack
+int 	MAX_THREADS 	= 0;		// Dynamically populated in init(). 
 int 	initialized = 0;			// Boolean to check if mem-manger is init'ed
 
 
 void initMemoryManager(){
 
-	PAGE_SIZE = sysconf(_SC_PAGE_SIZE);
+
+	int i;
+	PAGE_SIZE 		= sysconf(_SC_PAGE_SIZE);
+	PAGES_IN_MEMORY = (MEMORY_SIZE / PAGE_SIZE);
+	PAGES_IN_SWAP 	= (SWAP_SIZE / PAGE_SIZE);
+
+	MAX_THREADS = (PAGE_SIZE/ (STACK_SIZE + sizeof(ucontext_t)));
 
 
-	/* Need to allocate memory here with memalign */
-	// But im confused.  The commented out for loop below this one is 
-	// from that other group.  Need to research how memalign works. 
-	// What exactly is that second input?  
-	int s, find_front = 0;
-	for(s = 0; s < (8000); s++){
 
-		char* ptr = (char*)memalign(PAGE_SIZE, PAGE_SIZE);
 
-		if(find_front = 0){
-			memory = ptr;
-			find_front = 1;
-		}
+	printf("%d\n", STACK_SIZE+sizeof(ucontext_t));
+	printf("%d\n", MAX_THREADS);
+
+	/****************************************************************************
+	*			INIT MEMORY
+	*
+	****************************************************************************/	
+	
+	/* memory is an array of char ptrs. Each char* will point to a page */
+	char* memory[PAGES_IN_MEMORY];
+
+	/* Populating memory array.  Obtain pointers using memalign. */
+	for(i=0; i<PAGES_IN_MEMORY; i++){
+		// The memalign function allocates a block of size bytes whose address
+		// is a multiple of boundary. The boundary must be a power of two! 
+		// The function memalign works by allocating a somewhat larger block, 
+		// and then returning an address within the block that is on the specified 
+		// boundary.
+		memory[i] = (char*) memalign(PAGE_SIZE, PAGE_SIZE);
 	}
 
-	// for(size=0;size<8000;size+=1){
-	// 	char  *p=memalign(pagesize, 1024);
-	// 	if(c==0){
-	// 		physical=p;
-	// 	}
-	// 	c++;
-	// }
+
+	/****************************************************************************
+	*			INIT BOOK_KEEPER
+	*
+	****************************************************************************/	
+	mem_book* book_keeper[PAGES_IN_MEMORY]; 
+
+
+
+
+	/****************************************************************************
+	*			INIT LIBRARY
+	*
+	****************************************************************************/	
+	// library
+
+
+
+
+	// printf("%d\n", sizeof(mem_book));
+	// printf("%d\n", sizeof(book_keeper));
+
+
+
+
+
 
 	initialized = 1;
 }
@@ -49,17 +89,20 @@ void initMemoryManager(){
 
 
 
-void* scheduler_malloc(int size, int TID){}
+void* scheduler_malloc(int size, int TID){return 0;}
 
 
 void* myallocate(int size, char* FILE, int LINE){
 
 	if(initialized == 0)
 		initMemoryManager();
+
+
+	return 0;
 }
 
 
-void* mydellocate(void* ptr){}
+void* mydellocate(void* ptr){return 0;}
 
 
 
@@ -157,11 +200,9 @@ int main(){
 
 	intializeSwapSpace();
 
-    int addr = 0xFFFF8123;
-    int addr2 = 0xAAFF8123;
 
     initMemoryManager();
-    printf("%i\n",PAGE_SIZE);
+    printf("PageSize: %i\n",PAGE_SIZE);
 
 
 
@@ -174,6 +215,8 @@ int main(){
 
 
 	/*
+    // int addr = 0xFFFF8123;
+    // int addr2 = 0xAAFF8123;
     User's Virtual Address:   1111 1111 1111 1111 1000 0001 0010 0011
                             = 0xFFFF8123
 
@@ -185,6 +228,7 @@ int main(){
     right_dep is 1 
     request_size is 8356131 (right most 23)
     */
+    return 0;
 
 }
 
