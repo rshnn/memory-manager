@@ -1,38 +1,39 @@
+
 #include "memory-manager.h"
 
 
-// GLOBALS 
-char 		library; 				// Container for super_page_tables for each thread
-mem_book* 	book_keeper;			// An array of mem_books.  Keeps records of memory
-char* 		memory;					// main memory.  An array of char ptrs
-FILE* 		swap_file;				// swap file. 
+char** 			memory;				// main memory.  An array of char ptrs
+MemBook* 		book_keeper;		// An array of MemBooks.  Keeps records of memory
+SuperPTArray*	SPT_library;		// Array of SPA's. One for each thread (index = TID)
+FILE* 			swap_file;			// swap file. 
 
-int 	MEMORY_SIZE = 2<<22;		// 8MB  (8388608 bytes)
-int 	SWAP_SIZE	= 2<<23; 		// 16MB (16777216 bytes)
-int 	PAGE_SIZE 	= 0;			// Dynamically populated in init(). ~4096 bytes
+
+int 	MEMORY_SIZE 	= 2<<22;	// 8MB  (8388608 bytes)
+int 	SWAP_SIZE		= 2<<23; 	// 16MB (16777216 bytes)
+int 	PAGE_SIZE 		= 0;		// Dynamically populated in init(). ~4096 bytes
 int 	PAGES_IN_MEMORY = 0;		// Dynamically populated in init(). 2048 for PS=4096
 int 	PAGES_IN_SWAP 	= 0;		// Dynamically populated in init(). 4096 for PS=4096
+int 	STACK_SIZE 		= 128; 		// Size of a thread's stack TODO: CHANGE THIS IN MYPTHREAD
+int 	MAX_THREADS 	= 0;		// Dynamically populated in init(). 8 for PS=4096
 
-int 	STACK_SIZE 		= 128; 		// Size of a thread's stack
-int 	MAX_THREADS 	= 0;		// Dynamically populated in init(). 
-int 	initialized = 0;			// Boolean to check if mem-manger is init'ed
+int 	initialized 	= 0;		// Boolean to check if mem-manger is init'ed
 
 
 void initMemoryManager(){
 
 
-	int i;
+	int i,j;
 	PAGE_SIZE 		= sysconf(_SC_PAGE_SIZE);
 	PAGES_IN_MEMORY = (MEMORY_SIZE / PAGE_SIZE);
 	PAGES_IN_SWAP 	= (SWAP_SIZE / PAGE_SIZE);
+	MAX_THREADS 	= (PAGE_SIZE/ (STACK_SIZE + sizeof(ucontext_t)));
 
-	MAX_THREADS = (PAGE_SIZE/ (STACK_SIZE + sizeof(ucontext_t)));
+	// printf("Page Size:\t\t\t%i\n",PAGE_SIZE);
+	// printf("Total size of ucontext+stack:\t%d\n", STACK_SIZE+sizeof(ucontext_t));
+	// printf("Max Number of Threads:\t\t%d\n", MAX_THREADS);
 
 
 
-
-	printf("Total size of ucontext+stack: %d\n", STACK_SIZE+sizeof(ucontext_t));
-	printf("%d\n", MAX_THREADS);
 
 	/****************************************************************************
 	*			INIT MEMORY
@@ -40,7 +41,7 @@ void initMemoryManager(){
 	****************************************************************************/	
 	
 	/* memory is an array of char ptrs. Each char* will point to a page */
-	char* memory[PAGES_IN_MEMORY];
+	memory = (char **) malloc( PAGES_IN_MEMORY * sizeof(char*));
 
 	/* Populating memory array.  Obtain pointers using memalign. */
 	for(i=0; i<PAGES_IN_MEMORY; i++){
@@ -51,31 +52,45 @@ void initMemoryManager(){
 		// boundary.
 		memory[i] = (char*) memalign(PAGE_SIZE, PAGE_SIZE);
 	}
+	
 
 
 	/****************************************************************************
 	*			INIT BOOK_KEEPER
 	*
 	****************************************************************************/	
-	mem_book* book_keeper[PAGES_IN_MEMORY]; 
-
-
+	/* Each page in memory gets a MemBook to track who is currently resident */
+	book_keeper = (MemBook*) malloc(PAGES_IN_MEMORY * sizeof(MemBook));
+	for(i=0; i<PAGES_IN_MEMORY; i++){
+		book_keeper[i].isfree 				= 1;
+		book_keeper[i].TID 					= -2;	// Made it -2 in case -1 causes problems		
+		book_keeper[i].thread_page_number 	= -2;	// since we used -1 for a completed thread
+	}
 
 
 	/****************************************************************************
-	*			INIT LIBRARY
+	*			INIT SPT_LIBRARY
 	*
 	****************************************************************************/	
-	// library
+	/* Each thread gets a SuperPTArray */
+	SPT_library = (SuperPTArray*) malloc( MAX_THREADS * sizeof(SuperPTArray));
+
+	/* Init all values to 0. */
+	for(i=0; i<MAX_THREADS; i++){
+		for(j=0; j<32; j++){
+			SPT_library[i].array[j] = 0;
+		}
+		SPT_library[i].TID = i;
+	}
 
 
-
-
-	// printf("%d\n", sizeof(mem_book));
-	// printf("%d\n", sizeof(book_keeper));
-
-
-
+	/****************************************************************************
+	*			INIT SWAP_SPACE
+	*
+	****************************************************************************/	
+	swap_file = fopen("swagmaster.swp", "w+");
+	lseek(fileno(swap_file), 1<24, SEEK_SET);
+	rewind(swap_file);
 
 
 
@@ -134,16 +149,6 @@ int buildMemEntry(int valid, int isfree, int left_dep, int request_size){
 }
 
 
-void intializeSwapSpace(){
-
-	swap_file = fopen("swagmaster.swp", "w+");
-
-	lseek(fileno(swap_file), 1<24, SEEK_SET);
-	rewind(swap_file);
-
-}
-
-
 /**
 *	Private Helper Function
 * 		Prints a memEntry header.
@@ -158,7 +163,8 @@ void intializeSwapSpace(){
 *
 */
 void _printMemEntry(int header){
-
+	if(!SHOW_PRINTS)
+		return;
     printf(ANSI_COLOR_MAGENTA"ME_header: \t0x%x\t[v: %i | f: %i | rdep: %i | req_size: %i]\n"\
     	ANSI_COLOR_RESET, header, getValidBitME(header), getIsFreeBitME(header), \
     	getRightDepBitME(header), getRequestSizeME(header));
@@ -185,7 +191,8 @@ void _printMemEntry(int header){
 *
 */
 void _printPageTableEntry(int entry){
-
+	if(!SHOW_PRINTS)
+		return;
 	printf(ANSI_COLOR_MAGENTA"PTEntry: \t%x\t[u:%i |r:%i |ld:%i |rd:%i |d:%i |la:%i |pn: %i]\n" ANSI_COLOR_RESET, \
 		entry, getUsedBitPT(entry), getResidentBitPT(entry), getLeftDependentBitPT(entry), \
 		getRightDependentBitPT(entry), getDirtyBitPT(entry), getLargestAvailable_BitPT(entry), \
@@ -198,11 +205,8 @@ void _printPageTableEntry(int entry){
 
 int main(){
 
-	intializeSwapSpace();
-
 
     initMemoryManager();
-    printf("PageSize: %i\n",PAGE_SIZE);
 
 
 
@@ -212,22 +216,6 @@ int main(){
 
 
 
-
-
-	/*
-    // int addr = 0xFFFF8123;
-    // int addr2 = 0xAAFF8123;
-    User's Virtual Address:   1111 1111 1111 1111 1000 0001 0010 0011
-                            = 0xFFFF8123
-
-					0xAAFF8123 = 1010 1010 1111 1111 1000 0001 0010 0011	
-
-
-    valid is 1 
-    isfree is 1 
-    right_dep is 1 
-    request_size is 8356131 (right most 23)
-    */
     return 0;
 
 }

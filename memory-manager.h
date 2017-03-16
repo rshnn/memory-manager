@@ -9,8 +9,9 @@
 #include <ucontext.h> 
 #include <errno.h>
 #include <sys/types.h>
+#include <string.h>
 
-#define SUPRESS_PRINTS 		1
+#define SHOW_PRINTS  		1
 
 #define ANSI_COLOR_RED     "\x1b[31m"
 #define ANSI_COLOR_GREEN   "\x1b[32m"
@@ -47,17 +48,43 @@ typedef struct PTEntry_{
     unsigned int    dirty:1;                // Indicates if the page has been written to (i.e needs to be written back to memory when evicted)
     unsigned int    UNUSED:3;
     unsigned int    largest_available:12;   // Size of largest fragment available inside the page
-    unsigned int    page_number:12;         // Offset of page in memory (if it is loaded)
+    unsigned int    mem_page_number:12;     // Index of page in memory (if it is loaded)
 
 
 }PTEntry;
 
 
-typedef struct mem_book_{
+/* 
+    A set of 128 PTEntries. Initially only 1 is allocated per thread.  
+    Up to 32 can be made for a thread.  (128*32) = 4096 total possible pages   
+*/
+typedef struct PTBlock_{
+    struct PTEntry_ PTblock[128];
     unsigned int    TID:8;
-    unsigned int    page_number: 12;
-}mem_book;
+}PTBlock;
 
+
+
+
+typedef struct SuperPTArray_{
+    unsigned int    array[32];              // Max PTBlocks for a thread is 32
+    unsigned int    TID:8;                  // TID of thread that owns this SuperPTA
+}SuperPTArray;
+
+
+
+/*
+    A record of who's page is currently sitting in memory.
+    There will be a structure (book_keeper) that is an array of
+    [TOTAL_PAGES_IN_MEMORY] of these.  One MemBook per page. 
+
+    Example:  {TID: 10, t_p_n: 2} ==> Thread10's page 2 is resident here
+*/
+typedef struct MemBook_{
+    unsigned int    isfree:1;               // Is this page in mem free
+    unsigned int    TID:8;                  // TID of thread who's page is resident (max:256)
+    unsigned int    thread_page_number:12;  // Page# of the owning thread that is resident  (max:4096)
+}MemBook;
 
 
 
@@ -69,9 +96,9 @@ typedef struct mem_book_{
 
 /* PTEntry is 32 bits */
 #define makePTEntry(used, resident, left_dependent, right_dependent, \
-        dirty, largest_available, page_number) (struct PTEntry_){ \
+        dirty, largest_available, mem_page_number) (struct PTEntry_){ \
         used, resident, left_dependent, right_dependent, dirty, 0, \
-        largest_available, page_number}
+        largest_available, mem_page_number}
 
 
 
