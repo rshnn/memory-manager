@@ -79,14 +79,14 @@ typedef struct SuperPTArray_{
 }SuperPTArray;
 
 
-typedef struct ThrMemInfo_{
+typedef struct ThrInfo_{
 
     unsigned int    TID;                    // TID of thread
     unsigned int    num_blocks;             // Number of PTBlocks it owns
     unsigned int    num_pages;              // Number of PTEntries it uses
     struct SuperPTArray_* SPTArray;         // Pointer to thread's SuperPTArray
 
-}ThrMemInfo;
+}ThrInfo;
 
 /*
     A record of who's page is currently sitting in memory.
@@ -147,8 +147,8 @@ typedef struct MemBook_{
 *
 ************************************************************************************************************/
 
-void* scheduler_malloc(int size, int TID);
-void* myallocate(int size, char* FILE, int LINE);
+void* scheduler_malloc(int size);
+void* myallocate(int size, char* FILE, int LINE, int tid);
 void* mydellocate(void* ptr);
 
 

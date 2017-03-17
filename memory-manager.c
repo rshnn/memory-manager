@@ -8,9 +8,9 @@
 
 char** 			memory;				// main memory.  An array of char ptrs
 MemBook* 		book_keeper;		// An array of MemBooks.  Keeps records of memory
-SuperPTArray*	SPT_library;		// Array of SPA's. One for each thread (index = TID)
+SuperPTArray*	SPTA_library;		// Array of SPA's. One for each thread (index = TID)
 FILE* 			swap_file;			// swap file. 
-ThrMemInfo** 	thread_list;		// Array of ThrMemInfo ptrs for all threads 
+ThrInfo** 		thread_list;		// Array of ThrInfo ptrs for all threads 
 
 
 int 	MEMORY_SIZE 	= 2<<22;	// 8MB  (8388608 bytes)
@@ -33,7 +33,7 @@ int 	initialized 	= 0;		// Boolean to check if mem-manger is init'ed
 /**
 *	Helper Function
 *		Initializes all the structures needed to manage memory:
-*			memory, book_keeper, SPT_library, swap_file
+*			memory, book_keeper, SPTA_library, swap_file
 */
 void initMemoryManager(){
 
@@ -85,18 +85,18 @@ void initMemoryManager(){
 
 
 	/****************************************************************************
-	*			INIT SuperPTLIBRARY
+	*			INIT SPTA_library
 	*
 	****************************************************************************/	
 	/* Each thread gets a SuperPTArray */
-	SPT_library = (SuperPTArray*) malloc( MAX_THREADS * sizeof(SuperPTArray));
+	SPTA_library = (SuperPTArray*) malloc( MAX_THREADS * sizeof(SuperPTArray));
 
 	/* Init all values to 0. */
 	for(i=0; i<MAX_THREADS; i++){
 		for(j=0; j<32; j++){
-			SPT_library[i].array[j] = 0;
+			SPTA_library[i].array[j] = 0;
 		}
-		SPT_library[i].TID = i;
+		SPTA_library[i].TID = i;
 	}
 
 
@@ -104,9 +104,9 @@ void initMemoryManager(){
 	*			INIT THREAD_LIST
 	*
 	****************************************************************************/	
-	/* One ThrMemInfo struct ptr per thread.  The structs is NOT allocated here. */
-	thread_list = (ThrMemInfo**)malloc(MAX_THREADS * sizeof(ThrMemInfo*));
-	/* Init all the pointers to NULL.  They will be populated by makeThrMemInfo() */
+	/* One ThrInfo struct ptr per thread.  The structs is NOT allocated here. */
+	thread_list = (ThrInfo**)malloc(MAX_THREADS * sizeof(ThrInfo*));
+	/* Init all the pointers to NULL.  They will be populated by makeThrInfo() */
 	for(i=0; i<MAX_THREADS; i++){
 		thread_list[i] = NULL;
 	}
@@ -148,16 +148,17 @@ int buildMemEntry(int valid, int isfree, int left_dep, int request_size){
 
 /**
 *	Helper Function
-*		Builds a new empty ThrMemInfo struct.  
+*		Builds a new empty ThrInfo struct.  
 * 			Saves a pointer to respective index in thread_list
 * 		Input:  TID of owning thread
 */
-void buildThrMemInfo(int tid){
+void buildThrInfo(int tid){
 
-	ThrMemInfo* temp 	= (ThrMemInfo*)malloc(sizeof(ThrMemInfo));
+	ThrInfo* temp 	= (ThrInfo*)malloc(sizeof(ThrInfo));
 	temp->TID 			= tid;
 	temp->num_blocks 	= 0;
 	temp->num_pages 	= 0;
+	/* Write to global thread_list structure */
 	thread_list[tid] 	= temp;
 }
 
@@ -165,9 +166,9 @@ void buildThrMemInfo(int tid){
 /**
 *	Helper Function
 *		Builds a new empty PTBlock.
-* 		Input:  ThrMemInfo of owning thread
+* 		Input:  ThrInfo of owning thread
 */
-PTBlock* buildPTBlock(ThrMemInfo* thread){
+PTBlock* buildPTBlock(ThrInfo* thread){
 
 	PTBlock* block 	= (PTBlock*)malloc(sizeof(PTBlock));
 	block->TID 		= thread->TID;
@@ -192,13 +193,51 @@ PTBlock* buildPTBlock(ThrMemInfo* thread){
 ****************************************************************************
 ****************************************************************************/
 
-void* scheduler_malloc(int size, int TID){return 0;}
+void* scheduler_malloc(int size){return 0;}
 
 
-void* myallocate(int size, char* FILE, int LINE){
+void* myallocate(int size, char* FILE, int LINE, int tid){
 
 	if(initialized == 0)
 		initMemoryManager();
+
+	/*********************************************************************
+	(0) Fetch ThrInfo for this thread from thread_list
+
+	(1) Check for 1 in SPT, otherwise make a new entry
+	
+	(2) For each PTEntry, check if the largest available can meet the request 
+			Otherwise, make a new page 
+
+	(3) If request size is >4096 then just give it a new page (new PTEntry)
+
+	(4) Once we've found the page with enough space...
+		Look for the free memEntry header or append a new one to the end
+		Put this into a helper function.  findNextLargestAvailable()
+
+	(5) We can then load the page into memory if it isnt already
+
+	(6) Collect the pointer to return to the user.
+		memory[PAGENUM] + some offset + sizeof(its own memEntry)  	
+
+	**********************************************************************/
+
+	/* 0.  Find ThrInfo */ 
+	ThrInfo* thread = thread_list[tid];
+	if(thread->TID == -2){					// all initalized to -2 in init()
+		buildThrInfo(tid);
+		thread = thread_list[tid];
+	}
+	/*1.  Check for 1 in SPTA_library*/
+
+	SuperPTArray mySPTArray = SPTA_library[tid];
+
+	// Case1:  First malloc by this thread.  Generate new PTBlock.  Update SupPTA
+	if(mySPTArray.array[0] == 0){
+
+		PTBlock* newblock = buildPTBlock(thread);
+	/*INCOMPLETE.BRB*/
+	}
 
 
 	return 0;
@@ -220,6 +259,18 @@ void* mydellocate(void* ptr){return 0;}
 *							DEBUGGING FUNCTIONS
 ****************************************************************************
 ****************************************************************************/
+
+/**
+*	Private Debugging Function
+* 		Prints a ThrInfo struct
+*/
+void _printThrInfo(ThrInfo* thread){
+	if(!SHOW_PRINTS)
+		return;
+
+	printf(ANSI_COLOR_MAGENTA "ThreadID: %i\tNumBlocks:%i\tNumPages:%i\n" ANSI_COLOR_RESET, \
+		thread->TID, thread->num_blocks, thread->num_pages);
+}
 
 
 /**
@@ -282,6 +333,8 @@ int main(){
     initMemoryManager();
 
 
+    // buildThrInfo(4);
+    // _printThrInfo(thread_list[4]);
 
     int entry = buildMemEntry(1, 0, 0, 28347);
     _printMemEntry(entry);
