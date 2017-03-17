@@ -81,7 +81,6 @@ typedef struct SuperPTArray_{
 
 
 typedef struct ThrInfo_{
-
     unsigned int    TID;                    // TID of thread
     unsigned int    num_blocks;             // Number of PTBlocks it owns
     unsigned int    num_pages;              // Number of PTEntries it uses

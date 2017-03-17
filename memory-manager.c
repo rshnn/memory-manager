@@ -362,7 +362,12 @@ void* myallocate(int size, char* FILE, int LINE, int tid){
 		// book_keeper[B]->TID = mine?
 		// if not, put mine in. Save the other one in swap_file somewhere
 
-	book_keeper
+	char* startofpage = NULL;
+
+	if(book_keeper[mypagenumber].TID == thread->TID){
+		// page is already loaded here.  Proceed.
+		
+	}
 
 
 
