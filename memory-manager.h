@@ -65,9 +65,10 @@ typedef struct PTEntry_{
     Up to 32 can be made for a thread.  (128*32) = 4096 total possible pages   
 */
 typedef struct PTBlock_{
-    struct PTEntry_ PTblock[128];           // The block of PTEntries 
+    struct PTEntry_ ptentries[128];           // The block of PTEntries 
     unsigned int    TID:8;                  // TID of owning thread
     unsigned int    blockID;                // ID number of block (0 indexed)
+    struct PTBlock_* next;                  // PTBlock is a node.  Will be stored as a linked list
 }PTBlock;
 
 
@@ -75,6 +76,7 @@ typedef struct PTBlock_{
 
 typedef struct SuperPTArray_{
     unsigned int    array[32];              // Max PTBlocks for a thread is 32
+    unsigned int    saturated[32];          // Is the PTBlock at index i full?
     unsigned int    TID:8;                  // TID of thread that owns this SuperPTA
 }SuperPTArray;
 
@@ -85,7 +87,8 @@ typedef struct ThrInfo_{
     unsigned int    num_blocks;             // Number of PTBlocks it owns
     unsigned int    num_pages;              // Number of PTEntries it uses
     struct SuperPTArray_* SPTArray;         // Pointer to thread's SuperPTArray
-
+    struct PTBlock_*    head;               // Head of the linked list of PTBlocks
+    struct PTBlock_*    tail;               // Tail of the linked list "" 
 }ThrInfo;
 
 /*

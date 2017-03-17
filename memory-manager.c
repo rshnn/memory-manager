@@ -94,7 +94,9 @@ void initMemoryManager(){
 	/* Init all values to 0. */
 	for(i=0; i<MAX_THREADS; i++){
 		for(j=0; j<32; j++){
-			SPTA_library[i].array[j] = 0;
+			SPTA_library[i].array[j] 		= 0;
+			SPTA_library[i].saturated[j] 	= 0;
+
 		}
 		SPTA_library[i].TID = i;
 	}
@@ -151,32 +153,60 @@ int buildMemEntry(int valid, int isfree, int left_dep, int request_size){
 *		Builds a new empty ThrInfo struct.  
 * 			Saves a pointer to respective index in thread_list
 * 		Input:  TID of owning thread
+*		Returns 0 on success
 */
-void buildThrInfo(int tid){
+int buildThrInfo(int tid){
 
-	ThrInfo* temp 	= (ThrInfo*)malloc(sizeof(ThrInfo));
+	ThrInfo* temp 		= (ThrInfo*)malloc(sizeof(ThrInfo));
 	temp->TID 			= tid;
 	temp->num_blocks 	= 0;
 	temp->num_pages 	= 0;
+	temp->SPTArray 		= &SPTA_library[tid];
+	temp->head 			= NULL;
+	temp->tail 			= NULL;
+
 	/* Write to global thread_list structure */
 	thread_list[tid] 	= temp;
+
+	return 0;
 }
 
 
 /**
 *	Helper Function
-*		Builds a new empty PTBlock.
+*		Adds a new empty PTBlock to ThrInfo's block linked list.
 * 		Input:  ThrInfo of owning thread
+* 		Returns 0 on success 
 */
-PTBlock* buildPTBlock(ThrInfo* thread){
+int addPTBlock(ThrInfo* thread){
 
+	int i;
 	PTBlock* block 	= (PTBlock*)malloc(sizeof(PTBlock));
 	block->TID 		= thread->TID;
+	block->next  	= NULL;
 
 	block->blockID 	= thread->num_blocks;
 	thread->num_blocks++;
 
-	return block;
+	/* Init all ptentries */
+	for(i=0; i<128; i++){
+		block->ptentries[i] = makePTEntry(0,0,0,0,0,PAGE_SIZE,0);
+	}
+
+
+	/* Add to linked-list in ThrInfo */
+	// first block
+	if(thread->head == NULL){
+		thread->head = block;
+		thread->tail = block;
+	}else{
+	// else add to end of the list 
+		thread->tail->next = block;
+		thread->tail = block;
+
+	}
+
+	return 0;
 }
 
 
@@ -198,46 +228,78 @@ void* scheduler_malloc(int size){return 0;}
 
 void* myallocate(int size, char* FILE, int LINE, int tid){
 
+	int i;
+	int first_allocate = 0;
+	
 	if(initialized == 0)
 		initMemoryManager();
 
 	/*********************************************************************
 	(0) Fetch ThrInfo for this thread from thread_list
 
-	(1) Check for 1 in SPT, otherwise make a new entry
-	
-	(2) For each PTEntry, check if the largest available can meet the request 
-			Otherwise, make a new page 
+	(0.5) If request > PAGESIZE, do stuff with giving back multiple pages
+		Follow similar pattern to below, but check for enough contiguous pages
 
-	(3) If request size is >4096 then just give it a new page (new PTEntry)
+	(1) Locate PTBlock with available space
+		Check SuperPTA linearly for a 1.
+			Check saturated at that index to see if its full.
+			If not, save that index=A.
 
-	(4) Once we've found the page with enough space...
-		Look for the free memEntry header or append a new one to the end
-		Put this into a helper function.  findNextLargestAvailable()
+	(2) Locate PTEntry with enough space 
+		Go to Ath block (stored as linked list in ThrInfo)
+			Iterate through PTEntries (block->ptentries[0 - 127])
+			Check ptentries[i]->largest_available
+			If request fits, save that index, i=B
+		We need ThrInfo->TID's Page B
 
-	(5) We can then load the page into memory if it isnt already
-
-	(6) Collect the pointer to return to the user.
-		memory[PAGENUM] + some offset + sizeof(its own memEntry)  	
+	(3)	Is this page in memory rn?  Put it in if not.
+		Go to book_keeper.  Check if [TID,page B] is currently loaded in memory
+			book_keeper[B]->TID = mine?
+			if not, put mine in. Save the other one in swap_file somewhere
+		
+	(4) Collect Pointer and return to thread
+		memory[PAGENUM] + some_offset + sizeof(memEntry)
+		
 
 	**********************************************************************/
 
-	/* 0.  Find ThrInfo */ 
+	/* (0)  Find ThrInfo */ 
 	ThrInfo* thread = thread_list[tid];
-	if(thread->TID == -2){					// all initalized to -2 in init()
+	if(thread->TID == -2){					// all initialized to -2 in init()
+		first_allocate = 1;
 		buildThrInfo(tid);
-		thread = thread_list[tid];
+		thread = thread_list[tid];			// redundant? 
 	}
-	/*1.  Check for 1 in SPTA_library*/
 
-	SuperPTArray mySPTArray = SPTA_library[tid];
 
-	// Case1:  First malloc by this thread.  Generate new PTBlock.  Update SupPTA
-	if(mySPTArray.array[0] == 0){
+	/* (1)  Locate PTBlock with available space */
 
-		PTBlock* newblock = buildPTBlock(thread);
+	PTBlock* myblock 			= NULL; 		// Block with free space in it
+	SuperPTArray* sptarray 	= thread->SPTArray;
+
+		// Case 1:  First malloc by this thread.  Generate new PTBlock.  Update SupPTA
+	if(first_allocate){
+		addPTBlock(thread);
+		thread->SPTArray->array[0] = 1;
+		myblock = thread->head;
+	}else{
+		// Case 2: Regular case. 
+		
+		int block_index = -1;
+		for(i=0; i<32; i++){
+			if(sptarray->array[i] == 1){
+				block_index = i;
+				break;
+			}
+		}
+		if(block_index == -1)
+			printf(ANSI_COLOR_RED "panic\n"ANSI_COLOR_RESET);
+		//Ive got the index of the block now.
 	/*INCOMPLETE.BRB*/
+			
 	}
+
+
 
 
 	return 0;
