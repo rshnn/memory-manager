@@ -68,7 +68,6 @@ typedef struct PTBlock_{
     struct PTEntry_ ptentries[128];           // The block of PTEntries 
     unsigned int    TID:8;                  // TID of owning thread
     unsigned int    blockID;                // ID number of block (0 indexed)
-    struct PTBlock_* next;                  // PTBlock is a node.  Will be stored as a linked list
 }PTBlock;
 
 
@@ -87,8 +86,7 @@ typedef struct ThrInfo_{
     unsigned int    num_blocks;             // Number of PTBlocks it owns
     unsigned int    num_pages;              // Number of PTEntries it uses
     struct SuperPTArray_* SPTArray;         // Pointer to thread's SuperPTArray
-    struct PTBlock_*    head;               // Head of the linked list of PTBlocks
-    struct PTBlock_*    tail;               // Tail of the linked list "" 
+    struct PTBlock_**   blocks;             // Array of blocks pointers
 }ThrInfo;
 
 /*
