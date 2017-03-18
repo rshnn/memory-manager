@@ -64,12 +64,18 @@ void initMemoryManager(){
 	PAGES_IN_SWAP 	= (SWAP_SIZE / PAGE_SIZE);
 	MAX_THREADS 	= (PAGE_SIZE/ (STACK_SIZE + sizeof(ucontext_t)));
 
-	// printf("Page Size:\t\t\t%i\n",PAGE_SIZE);
-	// printf("Total size of ucontext+stack:\t%d\n", STACK_SIZE+sizeof(ucontext_t));
-	// printf("Max Number of Threads:\t\t%d\n", MAX_THREADS);
-
-
-
+	if(SHOW_PRINTS){	
+		printf(ANSI_COLOR_CYAN"SYSTEM INFO:\n\tPAGE_SIZE:\t\t\t%i\n"ANSI_COLOR_RESET,\
+			PAGE_SIZE);
+		printf(ANSI_COLOR_CYAN"\tMEMORY_SIZE:\t\t\t%d\n"ANSI_COLOR_RESET, MEMORY_SIZE);
+		printf(ANSI_COLOR_CYAN"\tPAGES_IN_MEMORY:\t\t%d\n"ANSI_COLOR_RESET, PAGES_IN_MEMORY);
+		printf(ANSI_COLOR_CYAN"\tSWAP_SIZE:\t\t\t%d\n"ANSI_COLOR_RESET, SWAP_SIZE);
+		printf(ANSI_COLOR_CYAN"\tPAGES_IN_SWAP:\t\t\t%d\n"ANSI_COLOR_RESET, PAGES_IN_SWAP);
+		printf(ANSI_COLOR_CYAN"\tsizeof(ucontext+stack):\t\t%d\n"ANSI_COLOR_RESET, \
+			STACK_SIZE+sizeof(ucontext_t));
+		printf(ANSI_COLOR_CYAN"\tMAX_THREADS:\t\t\t%d\n"ANSI_COLOR_RESET, MAX_THREADS);
+		printf(ANSI_COLOR_CYAN"\t------------------------------------\n"ANSI_COLOR_RESET);
+	}
 
 	/****************************************************************************
 	*			INIT MEMORY
@@ -375,6 +381,7 @@ void* myallocate(int size, char* FILE, int LINE, int tid){
 
 	}
 	startofpage = memory[mypagenumber];
+	// addr to the start of the page
 
 
 	/********************************************/
