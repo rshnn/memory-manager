@@ -32,6 +32,26 @@ int 	initialized 	= 0;		// Boolean to check if mem-manger is init'ed
 
 /**
 *	Helper Function
+*		Builds an integer that represents a 32-bit memEntry	
+* 		Usage:  int entry = buildMemEntry(1,0,0,35010);
+*/
+int buildMemEntry(int valid, int isfree, int left_dep, int request_size){
+	int entry = 0;
+
+	if (valid)
+		entry += 0x80000000;
+	if (isfree)
+		entry += 0x40000000;
+	if (left_dep)
+		entry += 0x20000000;
+
+	entry += request_size;
+
+	return entry;
+}
+
+/**
+*	Helper Function
 *		Initializes all the structures needed to manage memory:
 *			memory, book_keeper, SPTA_library, swap_file
 */
@@ -67,6 +87,7 @@ void initMemoryManager(){
 		// and then returning an address within the block that is on the specified 
 		// boundary.
 		memory[i] = (char*) memalign(PAGE_SIZE, PAGE_SIZE);
+		*memory[i] = buildMemEntry(1, 1, 0, PAGE_SIZE);
 	}
 
 
@@ -126,26 +147,6 @@ void initMemoryManager(){
 	initialized = 1;
 }
 
-
-/**
-*	Helper Function
-*		Builds an integer that represents a 32-bit memEntry	
-* 		Usage:  int entry = buildMemEntry(1,0,0,35010);
-*/
-int buildMemEntry(int valid, int isfree, int left_dep, int request_size){
-	int entry = 0;
-
-	if (valid)
-		entry += 0x80000000;
-	if (isfree)
-		entry += 0x40000000;
-	if (left_dep)
-		entry += 0x20000000;
-
-	entry += request_size;
-
-	return entry;
-}
 
 
 /**
@@ -365,13 +366,30 @@ void* myallocate(int size, char* FILE, int LINE, int tid){
 	char* startofpage = NULL;
 
 	if(book_keeper[mypagenumber].TID == thread->TID){
-		// page is already loaded here.  Proceed.
-		
+		// page is already loaded here.  Proceed
+	}else{
+		// Put current contents of this page into swap_file
+		// grab mypage from swap_file
+
+		/*INCOMPLETE.BRB*/
+
 	}
+	startofpage = memory[mypagenumber];
 
 
+	/********************************************/
+	/* (4) Generate memEntry for this request */
+		// Iterate through the page via memEntries.
+		// Find the one where request fits.  
+		// Do the memEntry things. 
+	
+	int headMemEntry = (int)(*startofpage);
+
+
+	// _printMemEntry(headME);
 
 	/*INCOMPLETE.BRB*/
+
 
 
 	return 0;
@@ -472,8 +490,6 @@ int main(){
 
     int entry = buildMemEntry(1, 0, 0, 28347);
     _printMemEntry(entry);
-
-
 
     return 0;
 
