@@ -27,15 +27,8 @@
 #define ANSI_COLOR_CYAN    "\x1b[36m"
 #define ANSI_COLOR_RESET   "\x1b[0m"
 
-
-
-
 // #define malloc(x) mymalloc(x, __FILE__, __LINE__);
 // #define free(x) myfree(x, __FILE__, __LINE__);
-
-
-
-
 
 /************************************************************************************************************
 *
@@ -43,6 +36,13 @@
 *
 ************************************************************************************************************/
 
+//for memEntry
+// +------1-------+-------1------+------1------+----6----+------23-----------+
+// |     valid    |     isfree   |   right_dep | GARBAGE |  request_size     |
+// |              |              |             |         |                   |
+// +--------------+--------------+-------------+---------+-------------------+
+//
+// 23 request_size  : max request size is 8388608 (8MB) 
 
 
 typedef struct PTEntry_{
@@ -52,10 +52,10 @@ typedef struct PTEntry_{
     unsigned int    left_dependent:1;       // Do we need to load the next page
     unsigned int    right_dependent:1; 
     unsigned int    dirty:1;                // Indicates if the page has been written to (i.e needs to be written back to memory when evicted)
-    unsigned int    UNUSED:3;
+    // unsigned int    UNUSED:4;
     unsigned int    largest_available:12;   // Size of largest fragment available inside the page
-    unsigned int    mem_page_number:12;     // Index of page in memory (if it is loaded)
-
+    unsigned int    mem_page_number:15;     // Index of page in memory (if it is loaded) (2048 pages for default page size)
+    unsigned int    swap_page_number: 12;    // Index of page in swap where it is resident 
 
 }PTEntry;
 
@@ -65,7 +65,7 @@ typedef struct PTEntry_{
     Up to 32 can be made for a thread.  (128*32) = 4096 total possible pages   
 */
 typedef struct PTBlock_{
-    struct PTEntry_ ptentries[128];           // The block of PTEntries 
+    struct PTEntry_ ptentries[128];         // The block of PTEntries 
     unsigned int    TID:8;                  // TID of owning thread
     unsigned int    blockID;                // ID number of block (0 indexed)
 }PTBlock;
@@ -74,8 +74,8 @@ typedef struct PTBlock_{
 
 
 typedef struct SuperPTArray_{
-    unsigned int    array[32];              // Max PTBlocks for a thread is 32
-    unsigned int    saturated[32];          // Is the PTBlock at index i full?
+    unsigned int    array[32];              // Max PTBlocks for a thread is 32  TODO can convert this to one int
+    unsigned int    saturated[32];          // Is the PTBlock at index i full?  TODO """ 
     unsigned int    TID:8;                  // TID of thread that owns this SuperPTA
 }SuperPTArray;
 
@@ -97,10 +97,27 @@ typedef struct ThrInfo_{
 */
 typedef struct MemBook_{
     unsigned int    isfree:1;               // Is this page in mem free
-    unsigned int    TID:8;                  // TID of thread who's page is resident (max:256)
-    unsigned int    thread_page_number:12;  // Page# of the owning thread that is resident  (max:4096)
+    int             TID:8;                  // TID of thread who's page is resident (max:256)
+    int             thread_page_number:12;  // Page# of the owning thread that is resident  (max:4096)
+    PTEntry*        entry;
 }MemBook;
 
+
+
+typedef struct SwapUnit_{
+    unsigned int    valid:1;
+    unsigned int    TID:8;
+    PTEntry*        ptentry;
+}SwapUnit;
+
+
+
+// typedef struct PageZero_{
+
+//     unsigned int    available_chunks;
+//     unsigned int    next_chunk;
+
+// }PageZero_
 
 
 /************************************************************************************************************
@@ -111,9 +128,9 @@ typedef struct MemBook_{
 
 /* PTEntry is 32 bits */
 #define makePTEntry(used, resident, left_dependent, right_dependent, \
-        dirty, largest_available, mem_page_number) (struct PTEntry_){ \
-        used, resident, left_dependent, right_dependent, dirty, 0, \
-        largest_available, mem_page_number}
+        dirty, largest_available, mem_page_number, swap_page_number) (struct PTEntry_){ \
+        used, resident, left_dependent, right_dependent, dirty, \
+        largest_available, mem_page_number, swap_page_number}
 
 
 

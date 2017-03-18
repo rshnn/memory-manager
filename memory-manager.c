@@ -7,11 +7,11 @@
 
 
 char** 			memory;				// main memory.  An array of char ptrs
+FILE* 			swap_file;			// swap file. 
 MemBook* 		book_keeper;		// An array of MemBooks.  Keeps records of memory
 SuperPTArray*	SPTA_library;		// Array of SPA's. One for each thread (index = TID)
-FILE* 			swap_file;			// swap file. 
 ThrInfo** 		thread_list;		// Array of ThrInfo ptrs for all threads 
-
+SwapUnit* 		swap_bank; 			// Array of SwapUnit structs.  Book keeping for swap file
 
 int 	MEMORY_SIZE 	= 2<<22;	// 8MB  (8388608 bytes)
 int 	SWAP_SIZE		= 2<<23; 	// 16MB (16777216 bytes)
@@ -20,11 +20,12 @@ int 	PAGES_IN_MEMORY = 0;		// Dynamically populated in init(). 2048 for PS=4096
 int 	PAGES_IN_SWAP 	= 0;		// Dynamically populated in init(). 4096 for PS=4096
 int 	STACK_SIZE 		= 128; 		// Size of a thread's stack TODO: CHANGE THIS IN MYPTHREAD
 int 	MAX_THREADS 	= 0;		// Dynamically populated in init(). 8 for PS=4096
+int 	VALID_PAGES_MEM	= 0;
 
 int 	initialized 	= 0;		// Boolean to check if mem-manger is init'ed
+int 	swap_count 		= 0;		// Number of pages in swap file occupied 
 
-
-/****************************************************************************
+/***************************************************************************
 ****************************************************************************
 *							HELPER FUNCTIONS
 ****************************************************************************
@@ -33,9 +34,9 @@ int 	initialized 	= 0;		// Boolean to check if mem-manger is init'ed
 /**
 *	Helper Function
 *		Builds an integer that represents a 32-bit memEntry	
-* 		Usage:  int entry = buildMemEntry(1,0,0,35010);
+* 		Usage:  int entry = initMemEntry(1,0,0,35010);
 */
-int buildMemEntry(int valid, int isfree, int left_dep, int request_size){
+int initMemEntry(int valid, int isfree, int left_dep, int request_size){
 	int entry = 0;
 
 	if (valid)
@@ -50,6 +51,37 @@ int buildMemEntry(int valid, int isfree, int left_dep, int request_size){
 	return entry;
 }
 
+
+
+/**
+*	Helper Function
+*		Builds a new empty ThrInfo struct.  
+* 			Saves a pointer to respective index in thread_list
+* 		Input:  TID of owning thread
+*		Returns 0 on success
+*/
+int buildThrInfo(int tid){
+
+	int i;
+
+	ThrInfo* temp 		= (ThrInfo*)malloc(sizeof(ThrInfo));
+	temp->TID 			= tid;
+	temp->num_blocks 	= 0;
+	temp->num_pages 	= 0;
+	temp->SPTArray 		= &(SPTA_library[tid]);			// Cannot make more than MAX_THREADS.  Will break here
+
+	/* Array of ptblock pointers.  They point to nothing initially */
+	temp->blocks 		= (PTBlock**)malloc(32*sizeof(PTBlock*));
+	for(i=0; i<32; i++){
+		temp->blocks[i] = NULL;						// Problem? 
+	}
+
+	/* Write to global thread_list structure */
+	thread_list[tid] 	= temp;
+
+	return 0;
+}
+
 /**
 *	Helper Function
 *		Initializes all the structures needed to manage memory:
@@ -62,13 +94,15 @@ void initMemoryManager(){
 	PAGE_SIZE 		= sysconf(_SC_PAGE_SIZE);
 	PAGES_IN_MEMORY = (MEMORY_SIZE / PAGE_SIZE);
 	PAGES_IN_SWAP 	= (SWAP_SIZE / PAGE_SIZE);
-	MAX_THREADS 	= (PAGE_SIZE/ (STACK_SIZE + sizeof(ucontext_t)));
+	MAX_THREADS 	= (PAGE_SIZE/ (sizeof(ucontext_t)+4));			// 4 for mementries
+	VALID_PAGES_MEM = PAGES_IN_MEMORY - 2; 			// Last 2 reserved for scheduler stuff 
 
 	if(SHOW_PRINTS){	
 		printf(ANSI_COLOR_CYAN"SYSTEM INFO:\n\tPAGE_SIZE:\t\t\t%i\n"ANSI_COLOR_RESET,\
 			PAGE_SIZE);
 		printf(ANSI_COLOR_CYAN"\tMEMORY_SIZE:\t\t\t%d\n"ANSI_COLOR_RESET, MEMORY_SIZE);
 		printf(ANSI_COLOR_CYAN"\tPAGES_IN_MEMORY:\t\t%d\n"ANSI_COLOR_RESET, PAGES_IN_MEMORY);
+		printf(ANSI_COLOR_CYAN"\tVALID_IN_MEMORY:\t\t%d\n"ANSI_COLOR_RESET, VALID_PAGES_MEM);
 		printf(ANSI_COLOR_CYAN"\tSWAP_SIZE:\t\t\t%d\n"ANSI_COLOR_RESET, SWAP_SIZE);
 		printf(ANSI_COLOR_CYAN"\tPAGES_IN_SWAP:\t\t\t%d\n"ANSI_COLOR_RESET, PAGES_IN_SWAP);
 		printf(ANSI_COLOR_CYAN"\tsizeof(ucontext+stack):\t\t%d\n"ANSI_COLOR_RESET, \
@@ -93,7 +127,7 @@ void initMemoryManager(){
 		// and then returning an address within the block that is on the specified 
 		// boundary.
 		memory[i] = (char*) memalign(PAGE_SIZE, PAGE_SIZE);
-		*memory[i] = buildMemEntry(1, 1, 0, PAGE_SIZE);
+		// (int)*(memory[i]) = initMemEntry(1, 1, 0, PAGE_SIZE); 		// ???????
 	}
 
 
@@ -103,11 +137,12 @@ void initMemoryManager(){
 	*
 	****************************************************************************/	
 	/* Each page in memory gets a MemBook to track who is currently resident */
-	book_keeper = (MemBook*) malloc(PAGES_IN_MEMORY * sizeof(MemBook));
+	book_keeper = (MemBook*) malloc(VALID_PAGES_MEM * sizeof(MemBook));
 	for(i=0; i<PAGES_IN_MEMORY; i++){
 		book_keeper[i].isfree 				= 1;
 		book_keeper[i].TID 					= -2;	// Made it -2 in case -1 causes problems		
 		book_keeper[i].thread_page_number 	= -2;	// since we used -1 for a completed thread
+		book_keeper[i].entry 				= NULL;  // pointer to PTE of the resident page 
 	}
 
 
@@ -137,7 +172,8 @@ void initMemoryManager(){
 	thread_list = (ThrInfo**)malloc(MAX_THREADS * sizeof(ThrInfo*));
 	/* Init all the pointers to NULL.  They will be populated by makeThrInfo() */
 	for(i=0; i<MAX_THREADS; i++){
-		thread_list[i] = NULL;
+		// thread_list[i] = NULL;
+		buildThrInfo(i);
 	}
 
 
@@ -145,9 +181,34 @@ void initMemoryManager(){
 	*			INIT SWAP_SPACE
 	*
 	****************************************************************************/	
-	swap_file = fopen("swagmaster.swp", "w+");
-	lseek(fileno(swap_file), 1<24, SEEK_SET);
-	rewind(swap_file);
+
+
+	swap_file = fopen("swagmaster.swp", "w");
+	// fseek(swap_file, 16777217, SEEK_SET);
+	
+	printf("tell before: %ld\n", ftell(swap_file));
+	ftruncate(fileno(swap_file), 16777216);
+	// write(fileno(swap_file), "thing", 5);
+	printf("tell after: %ld\n", ftell(swap_file));
+
+
+	// fputc('c', swap_file);
+	close(fileno(swap_file));
+
+
+
+
+
+	// lseek(fileno(swap_file), 16777216, SEEK_SET);
+	// rewind(swap_file);
+
+
+
+	/****************************************************************************
+	*			INIT SWAP_BANK
+	*
+	****************************************************************************/	
+	swap_bank = (SwapUnit*)malloc(PAGES_IN_SWAP* sizeof(SwapUnit));
 
 
 	initialized = 1;
@@ -155,34 +216,6 @@ void initMemoryManager(){
 
 
 
-/**
-*	Helper Function
-*		Builds a new empty ThrInfo struct.  
-* 			Saves a pointer to respective index in thread_list
-* 		Input:  TID of owning thread
-*		Returns 0 on success
-*/
-int buildThrInfo(int tid){
-
-	int i;
-
-	ThrInfo* temp 		= (ThrInfo*)malloc(sizeof(ThrInfo));
-	temp->TID 			= tid;
-	temp->num_blocks 	= 0;
-	temp->num_pages 	= 0;
-	temp->SPTArray 		= &SPTA_library[tid];
-
-	/* Array of ptblock pointers.  They point to nothing initially */
-	temp->blocks 		= (PTBlock**)malloc(32*sizeof(PTBlock*));
-	for(i=0; i<32; i++){
-		temp->blocks[i] = NULL;
-	}
-
-	/* Write to global thread_list structure */
-	thread_list[tid] 	= temp;
-
-	return 0;
-}
 
 
 /**
@@ -205,11 +238,12 @@ int addPTBlock(ThrInfo* thread){
 
 	/* Init all ptentries */
 	for(i=0; i<128; i++){
-		block->ptentries[i] = makePTEntry(0,0,0,0,0,PAGE_SIZE,0);
+		block->ptentries[i] = makePTEntry(0,0,0,0,0,PAGE_SIZE-32, 2048, 0);
 	}
 
-	thread->blocks[block->blockID] = block;	 		// BlockID is 0 indexed
-	thread->num_blocks++;
+	thread->blocks[block->blockID] = block;	 		// BlockID is 0 indexed  If breaks here.  Null pointer issues?
+	thread->num_blocks++; 							// Not 0 indexed 
+
 
 	thread->SPTArray->array[block->blockID] 	= 1;
 	thread->SPTArray->saturated[block->blockID] = 0;
@@ -288,7 +322,36 @@ void* myallocate(int size, char* FILE, int LINE, int tid){
 			If request fits, save that index, i=B
 		We need ThrInfo->TID's Page B
 
-	(3)	Is this page in memory rn?  Put it in if not.
+	(3)	Get my page into some spot in memory 
+
+			Do i have an assigned spot in memory yet? (mem_pag!= 2048)
+				Yes: Am i resident in this assigned spot? (book_keeper)
+					Yes: Continue;
+					No:  Move that guy into swap_bank 	(check his PTE)	
+
+
+				No: Look for a free spot in memory. (book_keeper) (mem_page == 2048)
+					
+					If all full, look to evict.  	
+						Is there enough swap_space?
+							Failure return NULL.  Swap full
+						Find the first MemBook that isnt mine
+							get it out of here!
+							My spot.  (save index to PTE->mem_page_number)
+
+		
+		Continue on to look for memEntry 
+			// make a function call
+
+
+
+
+
+
+
+
+
+		Is this page in memory rn?  Put it in if not.
 		Go to book_keeper.  Check if [TID,page B] is currently loaded in memory
 			book_keeper[B]->TID = mine?
 			if not, put mine in. Save the other one in swap_file somewhere
@@ -308,22 +371,19 @@ void* myallocate(int size, char* FILE, int LINE, int tid){
 	/********************************************/
 	/* (0)  Fetch ThrInfo */ 
 	ThrInfo* thread = thread_list[tid];
-	if(thread->TID == -2){					// all initialized to -2 in init()
+	if(thread->num_pages == 0)					
 		first_allocate = 1;
-		buildThrInfo(tid);
-		thread = thread_list[tid];			// redundant? 
-	}
 
 	/********************************************/
 	/* (1)  Locate PTBlock with available space */
 
 	PTBlock* myblock 			= NULL; 		// Block with free space in it
-
+	int 	block_index			= -1;
 		// Case 1: First malloc by this thread.  Generate new PTBlock.  Update SupPTA
 	if(first_allocate){
 		addPTBlock(thread);
-		thread->SPTArray->array[0] = 1;
 		myblock = thread->blocks[0];
+		block_index = 0;
 	}else{
 		// Case 2: Regular case. 
 		myblock = nextAvailableBlock(thread, 0);
@@ -360,28 +420,64 @@ void* myallocate(int size, char* FILE, int LINE, int tid){
 			myblock = nextAvailableBlock(thread, myblock->blockID);
 		}
 	}
-	// I've got the pagenumber that this thread can use now
+	// I've got the pagenumber that this thread can use now (mypagenumber)
+	PTEntry myPTE = thread->blocks[myblock->blockID]->ptentries[mypagenumber];
+
+	if(swap_count >= 4095){
+		printf(ANSI_COLOR_RED"" ANSI_COLOR_RESET);
+		return NULL;
+	}
+
+	int myrealpagenumber = mypagenumber+(myblock->blockID)*128;
 
 
 	/********************************************/
-	/* (3) Is this page in memory rn?  It should be */
-		// Go to book_keeper.  Check if [TID,page B] is currently loaded in memory
-		// book_keeper[B]->TID = mine?
-		// if not, put mine in. Save the other one in swap_file somewhere
+	/* (3)	Get my page into some spot in memory  */
+		// Do i have an assigned spot in memory yet? (mem_page== 2048)
+		// 	Yes: Am i resident in this assigned spot? (book_keeper)
+		// 		Yes: Continue;
+		// 		No:  Move that guy into swap_bank 	(check his PTE)	
 
-	char* startofpage = NULL;
 
-	if(book_keeper[mypagenumber].TID == thread->TID){
-		// page is already loaded here.  Proceed
-	}else{
-		// Put current contents of this page into swap_file
-		// grab mypage from swap_file
+		// 	No: Look for a free spot in memory. (book_keeper)
+				
+		// 		If all full, look to evict.  	
+		// 			Is there enough swap_space?
+		// 				Failure return NULL.  Swap full
+		// 			Find the first MemBook that isnt mine
+		// 				get it out of here!
+		// 				My spot.  (save index to PTE->mem_page_number)
 
-		/*INCOMPLETE.BRB*/
 
+	char* ptr_startofpage = NULL;
+
+	int myspotinmem = myPTE.mem_page_number;
+
+	if(!(book_keeper[myspotinmem].TID == thread->TID)){
+
+		// Write back guy in my spot
+		PTEntry* guy = book_keeper[myspotinmem].entry;
+		int guy_offset = guy->swap_page_number;
+
+		rewind(swap_file);
+		lseek(fileno(swap_file), guy_offset*PAGE_SIZE, SEEK_SET);
+		write(fileno(swap_file), memory[myspotinmem], PAGE_SIZE);
+		rewind(swap_file);
+
+		// Write my swap file in 
+		// First run:  dont have swap init'ed 
+
+		// 	if swap_p_n==0, not in swap
 	}
-	startofpage = memory[mypagenumber];
-	// addr to the start of the page
+	// I am resident. 
+
+
+	/* LEFT OFF HERE */
+
+
+
+
+
 
 
 	/********************************************/
@@ -390,7 +486,6 @@ void* myallocate(int size, char* FILE, int LINE, int tid){
 		// Find the one where request fits.  
 		// Do the memEntry things. 
 	
-	int headMemEntry = (int)(*startofpage);
 
 
 	// _printMemEntry(headME);
@@ -488,15 +583,15 @@ void _printPageTableEntry(int entry){
 
 int main(){
 
+    // fclose(swap_file);
 
     initMemoryManager();
-
 
     // buildThrInfo(4);
     // _printThrInfo(thread_list[4]);
 
-    int entry = buildMemEntry(1, 0, 0, 28347);
-    _printMemEntry(entry);
+    // int entry = initMemEntry(1, 0, 0, 28347, 0);
+    // _printMemEntry(entry);
 
     return 0;
 
