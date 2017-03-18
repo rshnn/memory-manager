@@ -209,7 +209,12 @@ void initMemoryManager(){
 	*
 	****************************************************************************/	
 	swap_bank = (SwapUnit*)malloc(PAGES_IN_SWAP* sizeof(SwapUnit));
-
+	int i;
+	for(i = 0; i < PAGES_IN_SWAP ; i++){
+		swap_bank[i].valid = 1;
+		swap_bank[i].TID = -2;
+		swap_bank[i].ptentry = NULL;
+	}
 
 	initialized = 1;
 }
@@ -402,7 +407,7 @@ void* myallocate(int size, char* FILE, int LINE, int tid){
 	/* (2) Locate PTEntry with enough space */
 
 	int mypagenumber = -1;
-	while(mypagenumber == -1){
+	while(mypagenumber == -1){ //infinite loop
 
 		for(i=0; i<128; i++){
 			PTEntry temp = myblock->ptentries[i];
@@ -418,19 +423,55 @@ void* myallocate(int size, char* FILE, int LINE, int tid){
 		if(mypagenumber == -1){
 			// myblock doesn't have a page with enough space
 			myblock = nextAvailableBlock(thread, myblock->blockID);
+			if(myblock == NULL){
+				return -1;//no more blocks available break from loop condition
+			}
 		}
 	}
 	// I've got the pagenumber that this thread can use now (mypagenumber)
 	PTEntry myPTE = thread->blocks[myblock->blockID]->ptentries[mypagenumber];
 
 	if(swap_count >= 4095){
-		printf(ANSI_COLOR_RED"" ANSI_COLOR_RESET);
+		printf(ANSI_COLOR_RED"" ANSI_COLOR_RESET);//cant make anymore pages, swap space is full
 		return NULL;
 	}
 
 	int myrealpagenumber = mypagenumber+(myblock->blockID)*128;
-
-
+	if(myPTE.mem_page_number == 2048){ //no swap entry made yet, find an open swap struct entry to secure its spot in the swap file
+		int available_index = -1;
+		for(i = 0; i < PAGES_IN_SWAP; i++){
+			if(swap_bank[i].valid == 0){
+				continue;
+			}
+			available_index = i;
+			swap_bank[i].valid = 0;
+			swap_bank[i].TID = tid;
+			swap_bank[i].ptentry = &(thread->blocks[myblock->blockID]->ptentries[mypagenumber]);
+			(thread->blocks[myblock->blockID]->ptentries[mypagenumber]).swap_page_number = available_index;
+			(thread->blocks[myblock->blockID]->ptentries[mypagenumber]).used = 1;
+			(thread->blocks[myblock->blockID]->ptentries[mypagenumber]).resident = 1; //going to be resident real soon
+			break;
+		}
+		//now to find a spot in memory
+		int foundspot = 0;
+		for( i = 0; i < PAGES_IN_MEMORY; i++){
+			if(book_keeper[i].isfree = 1){ //found a spot
+				book_keeper[i].isfree = 0;
+				book_keeper[i].TID = tid;
+				book_keeper[i].thread_page_number = myrealpagenumber;
+				book_keeper[i].entry = &(thread->blocks[myblock->blockID]->ptentries[mypagenumber]);
+				foundspot = 1;
+			}
+		}
+		if(foundspot = 0){//kick someone out of memory
+			for(i = 0; i < PAGES_IN_MEMORY;i++){
+				if(book_keeper[i].TID != tid){//kick out the ith index
+					//TODO//
+				}
+			}
+		}
+	
+	}
 	/********************************************/
 	/* (3)	Get my page into some spot in memory  */
 		// Do i have an assigned spot in memory yet? (mem_page== 2048)
