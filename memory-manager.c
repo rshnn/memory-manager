@@ -6,14 +6,14 @@
 #include "memory-manager.h"
 
 
-char** 			memory;				// main memory.  An array of char ptrs
+int** 			memory;				// main memory.  An array of char ptrs
 FILE* 			swap_file;			// swap file. 
 MemBook* 		book_keeper;		// An array of MemBooks.  Keeps records of memory
 SuperPTArray*	SPTA_library;		// Array of SPA's. One for each thread (index = TID)
 ThrInfo** 		thread_list;		// Array of ThrInfo ptrs for all threads 
 SwapUnit* 		swap_bank; 			// Array of SwapUnit structs.  Book keeping for swap file
 
-int 	MEMORY_SIZE 	= 2<<22;	// 8MB  (8388608 bytes)
+int 	MEMORY_SIZE 	= 2<<20;	// 8MB  (8388608 bytes)
 int 	SWAP_SIZE		= 2<<23; 	// 16MB (16777216 bytes)
 int 	PAGE_SIZE 		= 0;		// Dynamically populated in init(). ~4096 bytes
 int 	PAGES_IN_MEMORY = 0;		// Dynamically populated in init(). 2048 for PS=4096
@@ -117,7 +117,7 @@ void initMemoryManager(){
 	****************************************************************************/	
 	
 	/* memory is an array of char ptrs. Each char* will point to a page */
-	memory = (char **) malloc( PAGES_IN_MEMORY * sizeof(char*));
+	memory = (int **) malloc( PAGES_IN_MEMORY * sizeof(int*));
 
 	/* Populating memory array.  Obtain pointers using memalign. */
 	for(i=0; i<PAGES_IN_MEMORY; i++){
@@ -126,8 +126,8 @@ void initMemoryManager(){
 		// The function memalign works by allocating a somewhat larger block, 
 		// and then returning an address within the block that is on the specified 
 		// boundary.
-		memory[i] = (char*) memalign(PAGE_SIZE, PAGE_SIZE);
-		// (int)*(memory[i]) = initMemEntry(1, 1, 0, PAGE_SIZE); 		// ???????
+		memory[i] = (int*) memalign(PAGE_SIZE, PAGE_SIZE);
+		// memcpy(memory[i], &temp, sizeof(int));		
 	}
 
 
@@ -183,16 +183,12 @@ void initMemoryManager(){
 	****************************************************************************/	
 
 
-	swap_file = fopen("swagmaster.swp", "w");
+	swap_file = fopen("swagmaster.swp", "w+");
 	// fseek(swap_file, 16777217, SEEK_SET);
 	
-	printf("tell before: %ld\n", ftell(swap_file));
 	ftruncate(fileno(swap_file), 16777216);
-	// write(fileno(swap_file), "thing", 5);
-	printf("tell after: %ld\n", ftell(swap_file));
 
 
-	// fputc('c', swap_file);
 	close(fileno(swap_file));
 
 
@@ -209,7 +205,6 @@ void initMemoryManager(){
 	*
 	****************************************************************************/	
 	swap_bank = (SwapUnit*)malloc(PAGES_IN_SWAP* sizeof(SwapUnit));
-	int i;
 	for(i = 0; i < PAGES_IN_SWAP ; i++){
 		swap_bank[i].valid = 1;
 		swap_bank[i].TID = -2;
@@ -334,39 +329,20 @@ void* myallocate(int size, char* FILE, int LINE, int tid){
 					Yes: Continue;
 					No:  Move that guy into swap_bank 	(check his PTE)	
 
-
 				No: Look for a free spot in memory. (book_keeper) (mem_page == 2048)
-					
 					If all full, look to evict.  	
 						Is there enough swap_space?
 							Failure return NULL.  Swap full
 						Find the first MemBook that isnt mine
 							get it out of here!
 							My spot.  (save index to PTE->mem_page_number)
-
-		
-		Continue on to look for memEntry 
-			// make a function call
-
-
-
-
-
-
-
-
-
-		Is this page in memory rn?  Put it in if not.
-		Go to book_keeper.  Check if [TID,page B] is currently loaded in memory
-			book_keeper[B]->TID = mine?
-			if not, put mine in. Save the other one in swap_file somewhere
 	
 	(4) Generate memEntry for this request
 		Iterate through the page via memEntries.
 		Find the one where request fits.  
 		Do the memEntry things. 
 
-	(5) Collect Pointer and return to thread
+		Collect Pointer and return to thread
 		Location of memEntry+ sizeof(memEntry)
 
 		
@@ -376,19 +352,17 @@ void* myallocate(int size, char* FILE, int LINE, int tid){
 	/********************************************/
 	/* (0)  Fetch ThrInfo */ 
 	ThrInfo* thread = thread_list[tid];
-	if(thread->num_pages == 0)					
+	if(thread->num_blocks == 0)					
 		first_allocate = 1;
 
 	/********************************************/
 	/* (1)  Locate PTBlock with available space */
 
 	PTBlock* myblock 			= NULL; 		// Block with free space in it
-	int 	block_index			= -1;
 		// Case 1: First malloc by this thread.  Generate new PTBlock.  Update SupPTA
 	if(first_allocate){
 		addPTBlock(thread);
 		myblock = thread->blocks[0];
-		block_index = 0;
 	}else{
 		// Case 2: Regular case. 
 		myblock = nextAvailableBlock(thread, 0);
@@ -424,54 +398,15 @@ void* myallocate(int size, char* FILE, int LINE, int tid){
 			// myblock doesn't have a page with enough space
 			myblock = nextAvailableBlock(thread, myblock->blockID);
 			if(myblock == NULL){
-				return -1;//no more blocks available break from loop condition
+				printf(ANSI_COLOR_RED"No more blocks available for this thread.\n" ANSI_COLOR_RESET);
+				return NULL;//no more blocks available break from loop condition
 			}
 		}
 	}
 	// I've got the pagenumber that this thread can use now (mypagenumber)
-	PTEntry myPTE = thread->blocks[myblock->blockID]->ptentries[mypagenumber];
+	PTEntry* myPTE = &(thread->blocks[myblock->blockID]->ptentries[mypagenumber]);
 
-	if(swap_count >= 4095){
-		printf(ANSI_COLOR_RED"" ANSI_COLOR_RESET);//cant make anymore pages, swap space is full
-		return NULL;
-	}
 
-	int myrealpagenumber = mypagenumber+(myblock->blockID)*128;
-	if(myPTE.mem_page_number == 2048){ //no swap entry made yet, find an open swap struct entry to secure its spot in the swap file
-		int available_index = -1;
-		for(i = 0; i < PAGES_IN_SWAP; i++){
-			if(swap_bank[i].valid == 0){
-				continue;
-			}
-			available_index = i;
-			swap_bank[i].valid = 0;
-			swap_bank[i].TID = tid;
-			swap_bank[i].ptentry = &(thread->blocks[myblock->blockID]->ptentries[mypagenumber]);
-			(thread->blocks[myblock->blockID]->ptentries[mypagenumber]).swap_page_number = available_index;
-			(thread->blocks[myblock->blockID]->ptentries[mypagenumber]).used = 1;
-			(thread->blocks[myblock->blockID]->ptentries[mypagenumber]).resident = 1; //going to be resident real soon
-			break;
-		}
-		//now to find a spot in memory
-		int foundspot = 0;
-		for( i = 0; i < PAGES_IN_MEMORY; i++){
-			if(book_keeper[i].isfree = 1){ //found a spot
-				book_keeper[i].isfree = 0;
-				book_keeper[i].TID = tid;
-				book_keeper[i].thread_page_number = myrealpagenumber;
-				book_keeper[i].entry = &(thread->blocks[myblock->blockID]->ptentries[mypagenumber]);
-				foundspot = 1;
-			}
-		}
-		if(foundspot = 0){//kick someone out of memory
-			for(i = 0; i < PAGES_IN_MEMORY;i++){
-				if(book_keeper[i].TID != tid){//kick out the ith index
-					//TODO//
-				}
-			}
-		}
-	
-	}
 	/********************************************/
 	/* (3)	Get my page into some spot in memory  */
 		// Do i have an assigned spot in memory yet? (mem_page== 2048)
@@ -490,35 +425,123 @@ void* myallocate(int size, char* FILE, int LINE, int tid){
 		// 				My spot.  (save index to PTE->mem_page_number)
 
 
-	char* ptr_startofpage = NULL;
 
-	int myspotinmem = myPTE.mem_page_number;
+	int* start_of_my_page = NULL;
 
-	if(!(book_keeper[myspotinmem].TID == thread->TID)){
-
-		// Write back guy in my spot
-		PTEntry* guy = book_keeper[myspotinmem].entry;
-		int guy_offset = guy->swap_page_number;
-
-		rewind(swap_file);
-		lseek(fileno(swap_file), guy_offset*PAGE_SIZE, SEEK_SET);
-		write(fileno(swap_file), memory[myspotinmem], PAGE_SIZE);
-		rewind(swap_file);
-
-		// Write my swap file in 
-		// First run:  dont have swap init'ed 
-
-		// 	if swap_p_n==0, not in swap
+	if(swap_count >= 4095){
+		printf(ANSI_COLOR_RED"No more swap space available.\n" ANSI_COLOR_RESET);//cant make anymore pages, swap space is full
+		return NULL;
 	}
-	// I am resident. 
+
+	int myrealpagenumber = mypagenumber+(myblock->blockID)*128;
+	if(myPTE->mem_page_number == 2048){ //no swap entry made yet, find an open swap struct entry to secure its spot in the swap file
+		int available_index = -1;
+		for(i = 0; i < PAGES_IN_SWAP; i++){
+			if(swap_bank[i].valid == 0){
+				continue;
+			}
+			available_index = i;
+			swap_bank[i].valid = 0;
+			swap_bank[i].TID = tid;
+			swap_bank[i].ptentry = myPTE;
+			// Write to PTE 
+			myPTE->swap_page_number = available_index;
+			swap_count++;
+			myPTE->used = 1;
+			myPTE->resident = 1; //going to be resident real soon
+			break;
+		}
+		//now to find a spot in memory
+		int foundspot = 0;
+		for( i = 0; i < PAGES_IN_MEMORY; i++){
+			if(book_keeper[i].isfree == 1){ //found a spot
+				book_keeper[i].isfree = 0;
+				book_keeper[i].TID = tid;
+				book_keeper[i].thread_page_number = myrealpagenumber;
+				book_keeper[i].entry = myPTE;
+				foundspot = 1;
+				
+				available_index = i;
+				myPTE->mem_page_number = i;
+				break;
+			}
+		}
+		if(foundspot == 0){//kick someone out of memory
+			for(i = 0; i < PAGES_IN_MEMORY;i++){
+				if(book_keeper[i].TID != tid){//kick out the ith index
+					//TODO//
+					PTEntry* guy = book_keeper[i].entry;
+					int guys_swap_spot = guy->swap_page_number;
+					guy->resident = 0;
+
+					book_keeper[i].TID = tid;
+					book_keeper[i].thread_page_number = myrealpagenumber;
+					book_keeper[i].entry = myPTE;
+
+					/*update my pte->mempage*/
+					myPTE->mem_page_number = i;
+					available_index = i;
+
+					/*write guy back*/
+					swap_file = fopen("swagmaster.swp", "r+");
+					lseek(fileno(swap_file), (guys_swap_spot*PAGE_SIZE), SEEK_SET);
+					write(fileno(swap_file), memory[i], PAGE_SIZE);
+					close(fileno(swap_file));
+					
+					break;
+				}
+			}
+		}
+
+		/*write my page into memory[i]*/
+		swap_file = fopen("swagmaster.swp", "r");
+		lseek(fileno(swap_file), ((myPTE->swap_page_number)*PAGE_SIZE), SEEK_SET);
+		read(fileno(swap_file), memory[available_index], PAGE_SIZE);
+		close(fileno(swap_file));
 
 
-	/* LEFT OFF HERE */
+		/* New page created, do the base case memEntry stuff and return ptr. */
+		int temp = initMemEntry(1, 0, 0, size);
+		memcpy(memory[available_index], &temp, sizeof(int));		
+		int next_ME = initMemEntry(1, 1, 0, PAGE_SIZE-32-size);
+
+		// void* ((memory[available_index])+0x4+size);				// 4 is the size of memEntry
+
+		memcpy(((memory[available_index])+0x4+size), &next_ME, sizeof(int));
+		start_of_my_page = memory[available_index];
+
+		printf(ANSI_COLOR_GREEN"The earlier return:\tPN:%i, BN:%i\n"ANSI_COLOR_RESET, \
+			myPTE->mem_page_number, myblock->blockID);
 
 
+		// myPTE->largest_available = PAGE_SIZE-4-size;
+
+		return (void*) (start_of_my_page+4);
 
 
+	}else{
 
+		/* I already have a set location in memory */
+		int my_mem_spot = myPTE->mem_page_number;
+		PTEntry* entry_to_evict = book_keeper[my_mem_spot].entry;
+		entry_to_evict->resident = 0;
+					
+		/*write guy back*/
+		swap_file = fopen("swagmaster.swp", "r+");
+		lseek(fileno(swap_file), ((entry_to_evict->swap_page_number)*PAGE_SIZE), SEEK_SET);
+		write(fileno(swap_file), memory[my_mem_spot], PAGE_SIZE);
+		close(fileno(swap_file));
+
+		/*write my page into memory[mymemspot]*/
+		swap_file = fopen("swagmaster.swp", "r");
+		lseek(fileno(swap_file), ((myPTE->swap_page_number)*PAGE_SIZE), SEEK_SET);
+		read(fileno(swap_file), memory[my_mem_spot], PAGE_SIZE);
+		close(fileno(swap_file));
+		
+		start_of_my_page = memory[my_mem_spot];
+	}
+
+	/* At the end of this, start_of_my_page ptr is defined.*/
 
 
 	/********************************************/
@@ -527,15 +550,88 @@ void* myallocate(int size, char* FILE, int LINE, int tid){
 		// Find the one where request fits.  
 		// Do the memEntry things. 
 	
+	void* da_pointer;
+	int found = 0;
+	int temp_entry;
+	int* currME = start_of_my_page;
+	
+	while(!found){
+		int seg_size = getRequestSizeME(*currME);
+		int isfree = getIsFreeBitME(*currME);
+
+		if(isfree && seg_size >= size){
+			//found it
+
+			if(seg_size-size < 4){
+				// Not adding a new memEntry.  You get the block, guy.
+				temp_entry = initMemEntry(1, 0, 0, seg_size);
+				memcpy(currME, &temp_entry, sizeof(int));	
+				da_pointer = currME+4;
+						
+			}else{
+
+				// chopchop
+				temp_entry = initMemEntry(1, 0, 0, seg_size);
+				memcpy(currME, &temp_entry, sizeof(int));	
+
+				temp_entry = initMemEntry(1, 1, 0, seg_size-size-4);
+				memcpy(currME+4+seg_size, &temp_entry, sizeof(int));		
+
+				da_pointer = currME+4;
+			}
+			
+			found = 1;
+		}
+
+		currME = currME+seg_size+0x4;
+	}
 
 
-	// _printMemEntry(headME);
 
-	/*INCOMPLETE.BRB*/
+	/*Look through memEntries to update largestAvailable in PTE*/
+
+	currME = start_of_my_page;
+	int largest = 0;
+	int offset = PAGE_SIZE;
+
+	while(offset <= 4){
+
+		int isfree = getIsFreeBitME(*currME);
+		int seg_size = getRequestSizeME(*currME);
+
+		if(isfree){
+			/*update largest*/
+			 int d = getRequestSizeME(*currME);
+			 if(d > largest){
+			 	largest = d;
+			 }
+		}
+
+		currME = currME+4+seg_size;
+		offset = offset - seg_size - 4; 
+	}
+
+
+	/* Modify myPTE's values when done*/
+	myPTE->largest_available = largest;
+
+
+	printf(ANSI_COLOR_GREEN"The later return: \tPN:%i, BN: %i\n" ANSI_COLOR_RESET, \
+		myPTE->mem_page_number, myblock->blockID);
 
 
 
-	return 0;
+
+
+
+
+
+	return da_pointer;
+
+
+
+
+
 }
 
 
@@ -628,11 +724,21 @@ int main(){
 
     initMemoryManager();
 
-    // buildThrInfo(4);
-    // _printThrInfo(thread_list[4]);
+ 
+    int i;
+    for(i=0; i<10; i++){
 
-    // int entry = initMemEntry(1, 0, 0, 28347, 0);
-    // _printMemEntry(entry);
+	 	int* x = (int*) myallocate(4, " ", 2, 3);
+	 	*x = i*i*i;
+	 	
+	 	printf("TESTING %i:\t \tpointer = %p, value = %i\n\n",i, x, *x);
+    	
+    }
+
+
+    int* y = (int*) myallocate(PAGE_SIZE-30, " ", 2, 3);
+
+    // *y = 3;
 
     return 0;
 
