@@ -217,7 +217,7 @@ void initMemoryManager(){
 	****************************************************************************/	
 	/* Each page in memory gets a MemBook to track who is currently resident */
 	book_keeper = (MemBook*) malloc(VALID_PAGES_MEM * sizeof(MemBook));
-	for(i=0; i<PAGES_IN_MEMORY; i++){
+	for(i=0; i<VALID_PAGES_MEM; i++){
 		book_keeper[i].isfree 				= 1;
 		book_keeper[i].TID 					= -2;	// Made it -2 in case -1 causes problems		
 		book_keeper[i].thread_page_number 	= -2;	// since we used -1 for a completed thread
@@ -364,6 +364,311 @@ PTBlock* nextAvailableBlock(int tid, int startwith){
 
 
 
+	// printf(ANSI_COLOR_RED"NumPages: %i"ANSI_COLOR_RESET, numPages);
+
+
+/*  */
+void* multiplePageRequest(int size, char* FILE, int LINE, int tid){
+
+	int i;
+	int first_allocate = 0;
+	PTEntry* myPTE;
+
+	int minusFirstPage = size-(PAGE_SIZE-4);
+	int numPages = (minusFirstPage)/(PAGE_SIZE);
+	double doub_numPages = ((double)minusFirstPage)/((double)PAGE_SIZE); // How many besides the first page?
+	/*Look at reminder*/
+	if((doub_numPages-((double)numPages)) > 0)
+		numPages++;
+	numPages++; 	//Add one for the first page
+
+	MemBook array[numPages];
+
+
+	/*(1) Get thr info*/
+	ThrInfo* thread = thread_list[tid];
+	if(thread->num_blocks == 0)
+		first_allocate = 1;
+
+
+
+	if((swap_count+numPages > (PAGE_SIZE-1)) || (numPages > (PAGES_IN_MEMORY-2))){
+		printf(ANSI_COLOR_RED"No more room for you, dude.\n" ANSI_COLOR_RESET);
+		return NULL;
+	}
+
+	int z;
+	for(z=0; z<numPages; z++){
+		/*For each numPage, populate array*/
+
+
+
+		PTBlock* myblock 			= NULL; 		// Block with free space in it
+			// Case 1: First malloc by this thread.  Generate new PTBlock.  Update SupPTA
+		if(first_allocate){
+			// printf("Case 1: first!\n");
+			addPTBlock(tid);
+			first_allocate = 0;
+			myblock = thread->blocks[0];
+		}else{
+			// Case 2: Regular case. 
+			// printf("Case 2: regular.  Numblocks:%i\n", thread->num_blocks);
+			myblock = nextAvailableBlock(tid, 0);
+			if(myblock == NULL){
+				printf(ANSI_COLOR_RED"Cannot allocate anymore blocks to %i.\n"ANSI_COLOR_RESET, tid);
+				return NULL;
+			}		
+
+		}
+		// Ive got the block with available space now (myblock)		
+
+		
+
+		int mypagenumber = -1;
+		while(mypagenumber == -1){
+
+
+			for(i=0; i<128; i++){
+				PTEntry temp = myblock->ptentries[i];
+
+				int available_size = temp.largest_available;
+				
+				// printf("asize:%i\n",available_size);
+				// Is this page a brand new page?  Empty?
+				if(available_size == (PAGE_SIZE-4)){
+					mypagenumber = i;
+					// printf("enough size available here.: %i\n",mypagenumber);
+					break;
+				}
+			}
+			
+			if(mypagenumber == -1){
+				// myblock doesn't have a page with enough space
+				myblock = nextAvailableBlock(tid, myblock->blockID);
+				if(myblock == NULL){
+					printf(ANSI_COLOR_RED"No more blocks available for this thread.\n" ANSI_COLOR_RESET);
+					return NULL;//no more blocks available break from loop condition
+				}
+			}
+		}
+
+		// printf("This is the page im using:\t%i\n", mypagenumber);
+
+		PTEntry* myPTE = &(thread->blocks[myblock->blockID]->ptentries[mypagenumber]);
+		array[z].entry 				= myPTE;
+		array[z].thread_page_number = mypagenumber + (myblock->blockID)*128;
+
+
+		/*TODO:  Change this so that the last block still has available space*/
+		myPTE->largest_available = 0;
+
+		// printf(ANSI_COLOR_CYAN"\tarray[%i] is %i\n"ANSI_COLOR_RESET, z, array[z].thread_page_number);
+		
+
+	// end of for(numPages)
+	// Now my array of MemPages should be full  
+	}
+
+	int j;
+	int first_spot= -1; 
+	for(j=0; j<numPages; j++){
+		/* 
+			Grab MemPage from array=myEntry.
+				myEntry->swap_page_number
+		*/
+		myPTE = array[j].entry;
+		int myrealpagenumber = array[j].thread_page_number;
+
+
+
+		// printf("%i, mrpn:%i\n",j, myrealpagenumber);
+
+		if(myPTE->mem_page_number == 2048){ 
+		//no swap entry made yet, find an open swap struct entry to secure its spot in the swap file
+			int available_index = -1;
+			
+
+
+
+			/* Find a spot in swap*/
+			for(i = 0; i < PAGES_IN_SWAP; i++){
+				if(swap_bank[i].valid == 0){
+					continue;
+				}
+				available_index = i;
+				swap_bank[i].valid = 0;
+				swap_bank[i].TID = tid;
+				swap_bank[i].ptentry = myPTE;
+				// Write to PTE 
+				myPTE->swap_page_number = available_index;
+				swap_count++;
+				myPTE->used = 1;
+				myPTE->resident = 1; //going to be resident real soon
+				break;
+			}
+			
+
+			if(first_spot == -1){
+				//case 1:  first page
+
+				/* find continguous numPages number of pages from end */
+				int foundspot = 0;
+
+				/*  Find the first empty spot satisfying conditions from end */
+				for( i = VALID_PAGES_MEM-1-numPages; i >= 0; i--){
+
+					if(book_keeper[i].isfree == 1){ //found a spot
+						book_keeper[i].isfree = 0;
+						book_keeper[i].TID = tid;
+						book_keeper[i].thread_page_number = myrealpagenumber;
+						book_keeper[i].entry = myPTE;
+						foundspot = 1;
+						
+						available_index = i;
+						myPTE->mem_page_number = i;
+						break;
+					}
+				}
+
+
+				/* Could not find first free spot */
+				if(foundspot == 0){//kick someone out of memory
+
+					i = VALID_PAGES_MEM-1-numPages;
+					PTEntry* guy = book_keeper[i].entry;
+					int guys_swap_spot = guy->swap_page_number;
+					guy->resident = 0;
+
+					book_keeper[i].TID = tid;
+					book_keeper[i].thread_page_number = myrealpagenumber;
+					book_keeper[i].entry = myPTE;
+
+					/*update my pte->mempage*/
+					myPTE->mem_page_number = i;
+					available_index = i;
+
+					/*write guy back*/
+					swap_file = fopen("swagmaster.swp", "r+");
+					lseek(fileno(swap_file), (guys_swap_spot*PAGE_SIZE), SEEK_SET);
+					write(fileno(swap_file), memory[i], PAGE_SIZE);
+					close(fileno(swap_file));
+					
+				}
+				
+				first_spot = i;
+
+
+			}else{
+				// case 2:  not first 
+
+				first_spot++;
+				int myspot = first_spot;
+				//now to find a spot in memory
+
+
+				if(book_keeper[myspot].isfree == 1){ //found a spot
+					book_keeper[myspot].isfree = 0;
+					book_keeper[myspot].TID = tid;
+					book_keeper[myspot].thread_page_number = myrealpagenumber;
+					book_keeper[myspot].entry = myPTE;
+					
+					available_index = myspot;
+					myPTE->mem_page_number = myspot;
+				}else{
+					//kick em out, write him back to his swap spot.
+
+					PTEntry* guy = book_keeper[myspot].entry;
+					int guys_swap_spot = guy->swap_page_number;
+					guy->resident = 0;
+
+					book_keeper[myspot].TID = tid;
+					book_keeper[myspot].thread_page_number = myrealpagenumber;
+					book_keeper[myspot].entry = myPTE;
+
+					/*update my pte->mempage*/
+					myPTE->mem_page_number = myspot;
+					available_index = myspot;
+
+					/*write guy back*/
+					swap_file = fopen("swagmaster.swp", "r+");
+					lseek(fileno(swap_file), (guys_swap_spot*PAGE_SIZE), SEEK_SET);
+					write(fileno(swap_file), memory[myspot], PAGE_SIZE);
+					close(fileno(swap_file));	
+
+
+				}
+
+
+			}//end of else.  I should have available_index.  Safely removed whoever was there/accounted for case1
+
+
+			/*write my page into memory[i]*/
+			swap_file = fopen("swagmaster.swp", "r");
+			lseek(fileno(swap_file), ((myPTE->swap_page_number)*PAGE_SIZE), SEEK_SET);
+			read(fileno(swap_file), memory[available_index], PAGE_SIZE);
+			close(fileno(swap_file));
+
+
+			
+
+
+			myPTE->largest_available = PAGE_SIZE-4-size-4;
+
+			if(j==0){
+				// start_of_request = (void*)(start_of_my_page+4);
+				array[j].entry->right_dependent = 1;
+				first_spot = myPTE->mem_page_number;
+			
+			}else if(j==numPages-1){
+				array[j].entry->left_dependent = 1;
+			
+			}else{
+				array[j].entry->left_dependent = 1;
+				array[j].entry->right_dependent = 1;
+			}
+			myPTE->largest_available = 0;
+			_printPageTableEntry(myPTE);
+
+
+		}else{
+
+			printf(ANSI_COLOR_RED"Panic!\n"ANSI_COLOR_RESET);
+		}
+
+		/* Give them a spot in swapfile */
+
+
+
+	}
+
+	/*Write mem entry in to first spot.  Write blank mem entry at the end of request*/
+
+
+	int end_spot = first_spot;
+	first_spot = first_spot - numPages;
+
+
+	/* memEntry for this request */
+	int temp = initMemEntry(1, 0, 0, size);
+	memcpy(memory[first_spot], &temp, sizeof(int));		
+
+
+
+	/*memEntry to append to end of this request*/
+	int next_ME = initMemEntry(1, 1, 0, 0);
+	memcpy(((memory[end_spot])+0x4+size), &next_ME, sizeof(int));
+	
+
+	int* start_of_my_request = memory[first_spot]+4;
+
+	printf(ANSI_COLOR_GREEN"Large requst return:\tPN:%i, BN:%i, start:%i, end%i\n"ANSI_COLOR_RESET, \
+		myPTE->mem_page_number, (array[0].thread_page_number)/128, first_spot, end_spot);
+
+
+	return (void*) start_of_my_request;
+
+}
+
 
 
 
@@ -381,6 +686,13 @@ void* scheduler_malloc(int size){return 0;}
 
 void* myallocate(int size, char* FILE, int LINE, int tid){
 
+
+	if(size > PAGE_SIZE-4){
+		return multiplePageRequest(size, FILE, LINE, tid);
+	}
+
+
+
 	int i;
 	int first_allocate = 0;
 	
@@ -390,7 +702,7 @@ void* myallocate(int size, char* FILE, int LINE, int tid){
 	/*********************************************************************
 	(0) Fetch ThrInfo for this thread from thread_list
 
-	(0.5) If request > PAGESIZE, do stuff with giving back multiple pages
+	(0.5) If request > PAGE_SIZE, do stuff with giving back multiple pages
 		Follow similar pattern to below, but check for enough contiguous pages
 
 	(1) Locate PTBlock with available space
@@ -540,7 +852,7 @@ void* myallocate(int size, char* FILE, int LINE, int tid){
 		}
 		//now to find a spot in memory
 		int foundspot = 0;
-		for( i = 0; i < PAGES_IN_MEMORY; i++){
+		for( i = 0; i < VALID_PAGES_MEM; i++){
 			if(book_keeper[i].isfree == 1){ //found a spot
 				book_keeper[i].isfree = 0;
 				book_keeper[i].TID = tid;
@@ -554,7 +866,7 @@ void* myallocate(int size, char* FILE, int LINE, int tid){
 			}
 		}
 		if(foundspot == 0){//kick someone out of memory
-			for(i = 0; i < PAGES_IN_MEMORY;i++){
+			for(i = 0; i < VALID_PAGES_MEM;i++){
 				if(book_keeper[i].TID != tid){//kick out the ith index
 					//TODO//
 					PTEntry* guy = book_keeper[i].entry;
@@ -751,9 +1063,6 @@ void* myallocate(int size, char* FILE, int LINE, int tid){
 	return da_pointer;
 
 
-
-
-
 }
 
 
@@ -793,15 +1102,44 @@ int debug_1_simple_allocates_multiple_thread(){
 }
 
 
+int debug_2_multiple_page_request(){
 
+	initMemoryManager();
+
+	printf("~~~~~~~~TID=4~~~~~~~~\n");
+	int* a = (int*) myallocate(PAGE_SIZE*3, " ", 3, 4);
+	*a = 38;
+	printf(ANSI_COLOR_RED"%i\n"ANSI_COLOR_RESET, *a);
+
+	printf("~~~~~~~~TID=3~~~~~~~~\n");
+	myallocate(PAGE_SIZE*4, " ", 3, 3);
+
+
+	printf("~~~~~~~~TID=4~~~~~~~~\n");
+	myallocate(PAGE_SIZE*4, " ", 3, 4);
+
+
+	/* This does not work bc no signal handler for mprotect yet */
+	// printf(ANSI_COLOR_RED"%i\n"ANSI_COLOR_RESET, *a);
+
+
+	printf("~~~~~~~~TID=3~~~~~~~~\n");
+	myallocate(PAGE_SIZE*4, " ", 3, 3);
+
+
+
+	return 0;
+}
+	
 
 
 int main(){
 
 
 
-	debug_1_simple_allocates_multiple_thread();
- 
+	// debug_1_simple_allocates_multiple_thread();
+ 	
+ 	debug_2_multiple_page_request();
 
 
     return 0;
