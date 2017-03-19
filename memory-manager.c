@@ -352,6 +352,9 @@ void* myallocate(int size, char* FILE, int LINE, int tid){
 	/********************************************/
 	/* (0)  Fetch ThrInfo */ 
 	ThrInfo* thread = thread_list[tid];
+
+	printf("Numblocks:%i\n", thread->num_blocks);
+
 	if(thread->num_blocks == 0)					
 		first_allocate = 1;
 
@@ -514,7 +517,7 @@ void* myallocate(int size, char* FILE, int LINE, int tid){
 			myPTE->mem_page_number, myblock->blockID);
 
 
-		// myPTE->largest_available = PAGE_SIZE-4-size;
+		myPTE->largest_available = PAGE_SIZE-4-size;
 
 		return (void*) (start_of_my_page+4);
 
