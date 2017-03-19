@@ -25,6 +25,85 @@ int 	VALID_PAGES_MEM	= 0;
 int 	initialized 	= 0;		// Boolean to check if mem-manger is init'ed
 int 	swap_count 		= 0;		// Number of pages in swap file occupied 
 
+
+
+
+/****************************************************************************
+****************************************************************************
+*							DEBUGGING FUNCTIONS
+****************************************************************************
+****************************************************************************/
+
+/**
+*	Private Debugging Function
+* 		Prints a ThrInfo struct
+*/
+void _printThrInfo(ThrInfo* thread){
+	if(!SHOW_PRINTS)
+		return;
+
+	printf(ANSI_COLOR_MAGENTA "ThreadID: %i\tNumBlocks:%i\tNumPages:%i\n" ANSI_COLOR_RESET, \
+		thread->TID, thread->num_blocks, thread->num_pages);
+}
+
+
+/**
+*	Private Debugging Function
+* 		Prints a memEntry header.
+*		Input:  32-bit header as integer. 	
+*			header{	
+*					1:	valid,
+*					1:	isfree,
+*					1:	right_dependent
+*					6:	unused
+*					23:	request size
+*			}
+*
+*/
+void _printMemEntry(int header){
+	if(!SHOW_PRINTS)
+		return;
+    printf(ANSI_COLOR_MAGENTA"ME_header: \t0x%x\t[v: %i | f: %i | rdep: %i | req_size: %i]\n"\
+    	ANSI_COLOR_RESET, header, getValidBitME(header), getIsFreeBitME(header), \
+    	getRightDepBitME(header), getRequestSizeME(header));
+
+}
+
+
+
+
+/**
+*	Private Debugging Function
+* 		Prints a page table entry.
+*		Input:  32-bit entry as integer. 	
+*			entry{	
+*					1:	used,
+*					1:	resident,
+*					1:	left_dep,
+*					1:	right_dep,
+*					1:	dirty,
+*					3:	unused
+*					12:	largest_avail,
+*					12: page_number
+*			}
+*
+*/
+void _printPageTableEntry(PTEntry* entry){
+	if(!SHOW_PRINTS)
+		return;
+	printf(ANSI_COLOR_MAGENTA"PTEntry: \t[u:%i |r:%i |ld:%i |rd:%i |d:%i |la:%i |pn: %i |  spn: %i]\n" ANSI_COLOR_RESET, \
+		entry->used, entry->resident, entry->left_dependent, \
+		entry->right_dependent, entry->dirty, entry->largest_available, \
+		entry->mem_page_number, entry->swap_page_number);
+
+}
+
+
+
+
+
+
+
 /***************************************************************************
 ****************************************************************************
 *							HELPER FUNCTIONS
@@ -224,7 +303,9 @@ void initMemoryManager(){
 * 		Input:  ThrInfo of owning thread
 * 		Returns 0 on success 
 */
-int addPTBlock(ThrInfo* thread){
+int addPTBlock(int tid){
+
+	ThrInfo* thread = thread_list[tid];
 
 	if(thread->num_blocks == 32){
 		return -1;
@@ -238,7 +319,7 @@ int addPTBlock(ThrInfo* thread){
 
 	/* Init all ptentries */
 	for(i=0; i<128; i++){
-		block->ptentries[i] = makePTEntry(0,0,0,0,0,PAGE_SIZE-32, 2048, 0);
+		block->ptentries[i] = makePTEntry(0,0,0,0,0,PAGE_SIZE-4, 2048, 0);
 	}
 
 	thread->blocks[block->blockID] = block;	 		// BlockID is 0 indexed  If breaks here.  Null pointer issues?
@@ -252,13 +333,15 @@ int addPTBlock(ThrInfo* thread){
 }
 
 
-PTBlock* nextAvailableBlock(ThrInfo* thread, int startwith){
+PTBlock* nextAvailableBlock(int tid, int startwith){
 
 	int i;
 	int block_index = -1;
+	ThrInfo* thread = thread_list[tid];
+
 	SuperPTArray* sptarray = thread->SPTArray;
 
-	for(i=startwith+1; i<32; i++){
+	for(i=startwith; i<32; i++){
 		if(sptarray->array[i] == 1 && sptarray->saturated[i] == 0){
 			// This block is initialized and unsaturated
 			block_index = i;
@@ -267,7 +350,7 @@ PTBlock* nextAvailableBlock(ThrInfo* thread, int startwith){
 	}
 	if(block_index == -1){
 		// Need to add a new block 
-		int success = addPTBlock(thread);
+		int success = addPTBlock(tid);
 		if(success == -1){
 			return NULL;
 		}
@@ -353,8 +436,6 @@ void* myallocate(int size, char* FILE, int LINE, int tid){
 	/* (0)  Fetch ThrInfo */ 
 	ThrInfo* thread = thread_list[tid];
 
-	printf("Numblocks:%i\n", thread->num_blocks);
-
 	if(thread->num_blocks == 0)					
 		first_allocate = 1;
 
@@ -364,11 +445,13 @@ void* myallocate(int size, char* FILE, int LINE, int tid){
 	PTBlock* myblock 			= NULL; 		// Block with free space in it
 		// Case 1: First malloc by this thread.  Generate new PTBlock.  Update SupPTA
 	if(first_allocate){
-		addPTBlock(thread);
+		printf("first!\n");
+		addPTBlock(tid);
 		myblock = thread->blocks[0];
 	}else{
 		// Case 2: Regular case. 
-		myblock = nextAvailableBlock(thread, 0);
+		printf("Case 2 regular.  Numblocks:%i\n", thread->num_blocks);
+		myblock = nextAvailableBlock(tid, 0);
 		if(myblock == NULL){
 			printf(ANSI_COLOR_RED"Cannot allocate anymore blocks to %i.\n"ANSI_COLOR_RESET, tid);
 			return NULL;
@@ -391,7 +474,7 @@ void* myallocate(int size, char* FILE, int LINE, int tid){
 			int available_size = temp.largest_available;
 			
 			// Does request fit in here?  (sizeof(int) = sizeof(memEntry))
-			if(available_size > (size + sizeof(int))){
+			if(available_size > size){
 				mypagenumber = i;
 				break;
 			}
@@ -399,7 +482,7 @@ void* myallocate(int size, char* FILE, int LINE, int tid){
 		
 		if(mypagenumber == -1){
 			// myblock doesn't have a page with enough space
-			myblock = nextAvailableBlock(thread, myblock->blockID);
+			myblock = nextAvailableBlock(tid, myblock->blockID);
 			if(myblock == NULL){
 				printf(ANSI_COLOR_RED"No more blocks available for this thread.\n" ANSI_COLOR_RESET);
 				return NULL;//no more blocks available break from loop condition
@@ -409,6 +492,7 @@ void* myallocate(int size, char* FILE, int LINE, int tid){
 	// I've got the pagenumber that this thread can use now (mypagenumber)
 	PTEntry* myPTE = &(thread->blocks[myblock->blockID]->ptentries[mypagenumber]);
 
+	printf("POINTIES: %i, %p\n", thread->TID, *(thread->blocks));
 
 	/********************************************/
 	/* (3)	Get my page into some spot in memory  */
@@ -506,7 +590,7 @@ void* myallocate(int size, char* FILE, int LINE, int tid){
 		/* New page created, do the base case memEntry stuff and return ptr. */
 		int temp = initMemEntry(1, 0, 0, size);
 		memcpy(memory[available_index], &temp, sizeof(int));		
-		int next_ME = initMemEntry(1, 1, 0, PAGE_SIZE-32-size);
+		int next_ME = initMemEntry(1, 1, 0, PAGE_SIZE-4-size);
 
 		// void* ((memory[available_index])+0x4+size);				// 4 is the size of memEntry
 
@@ -517,30 +601,39 @@ void* myallocate(int size, char* FILE, int LINE, int tid){
 			myPTE->mem_page_number, myblock->blockID);
 
 
-		myPTE->largest_available = PAGE_SIZE-4-size;
+		myPTE->largest_available = PAGE_SIZE-4-size-4;
+		_printPageTableEntry(myPTE);
 
 		return (void*) (start_of_my_page+4);
 
 
 	}else{
 
-		/* I already have a set location in memory */
 		int my_mem_spot = myPTE->mem_page_number;
-		PTEntry* entry_to_evict = book_keeper[my_mem_spot].entry;
-		entry_to_evict->resident = 0;
-					
-		/*write guy back*/
-		swap_file = fopen("swagmaster.swp", "r+");
-		lseek(fileno(swap_file), ((entry_to_evict->swap_page_number)*PAGE_SIZE), SEEK_SET);
-		write(fileno(swap_file), memory[my_mem_spot], PAGE_SIZE);
-		close(fileno(swap_file));
 
-		/*write my page into memory[mymemspot]*/
-		swap_file = fopen("swagmaster.swp", "r");
-		lseek(fileno(swap_file), ((myPTE->swap_page_number)*PAGE_SIZE), SEEK_SET);
-		read(fileno(swap_file), memory[my_mem_spot], PAGE_SIZE);
-		close(fileno(swap_file));
-		
+		/* AM i already in this mem spot? */
+		if(book_keeper[my_mem_spot].TID != tid){
+			/*im not already here*/
+
+
+			/* I already have a set location in memory */
+			PTEntry* entry_to_evict = book_keeper[my_mem_spot].entry;
+			entry_to_evict->resident = 0;
+						
+			/*write guy back*/
+			swap_file = fopen("swagmaster.swp", "r+");
+			lseek(fileno(swap_file), ((entry_to_evict->swap_page_number)*PAGE_SIZE), SEEK_SET);
+			write(fileno(swap_file), memory[my_mem_spot], PAGE_SIZE);
+			close(fileno(swap_file));
+
+			/*write my page into memory[mymemspot]*/
+			swap_file = fopen("swagmaster.swp", "r");
+			lseek(fileno(swap_file), ((myPTE->swap_page_number)*PAGE_SIZE), SEEK_SET);
+			read(fileno(swap_file), memory[my_mem_spot], PAGE_SIZE);
+			close(fileno(swap_file));
+
+			
+		}
 		start_of_my_page = memory[my_mem_spot];
 	}
 
@@ -557,7 +650,7 @@ void* myallocate(int size, char* FILE, int LINE, int tid){
 	int found = 0;
 	int temp_entry;
 	int* currME = start_of_my_page;
-	
+	int isfree;
 	while(!found){
 		int seg_size = getRequestSizeME(*currME);
 		int isfree = getIsFreeBitME(*currME);
@@ -574,11 +667,17 @@ void* myallocate(int size, char* FILE, int LINE, int tid){
 			}else{
 
 				// chopchop
-				temp_entry = initMemEntry(1, 0, 0, seg_size);
+				temp_entry = initMemEntry(1, 0, 0, size);
 				memcpy(currME, &temp_entry, sizeof(int));	
 
+
 				temp_entry = initMemEntry(1, 1, 0, seg_size-size-4);
-				memcpy(currME+4+seg_size, &temp_entry, sizeof(int));		
+				isfree = getIsFreeBitME(temp_entry);
+
+				// printf("isfree: %i\n", isfree);	
+				// _printMemEntry(temp_entry);
+				// printf("Lookatme!\t"); _printMemEntry(temp_entry);
+				memcpy(currME+4+size, &temp_entry, sizeof(int));		
 
 				da_pointer = currME+4;
 			}
@@ -593,28 +692,47 @@ void* myallocate(int size, char* FILE, int LINE, int tid){
 
 	/*Look through memEntries to update largestAvailable in PTE*/
 
+
 	currME = start_of_my_page;
+
 	int largest = 0;
 	int offset = PAGE_SIZE;
+	
+	while(offset >= -4){
 
-	while(offset <= 4){
-
-		int isfree = getIsFreeBitME(*currME);
+		int isvalid = getValidBitME(*currME);
+		isfree = getIsFreeBitME(*currME);
 		int seg_size = getRequestSizeME(*currME);
+		// _printMemEntry(*currME);
+		// printf("\t\tReqSize is %i at offset: %i\n", seg_size, offset);
+
+		if (!isvalid){
+			/*prob the last one*/
+			// printf("not valid.\n");
+			int d = getRequestSizeME(*currME);
+			if(d > largest){
+			 	largest = d;
+			}
+			break;
+		}
 
 		if(isfree){
 			/*update largest*/
+			// printf("Is free!\n");
 			 int d = getRequestSizeME(*currME);
 			 if(d > largest){
 			 	largest = d;
 			 }
 		}
 
-		currME = currME+4+seg_size;
-		offset = offset - seg_size - 4; 
+		currME = currME+0x4+seg_size;
+
+		offset = offset - seg_size - 4;
+		// printf("\t\tnewoffset: %i\n", offset);
 	}
 
 
+	printf("I found it its this: %i\n", largest);
 	/* Modify myPTE's values when done*/
 	myPTE->largest_available = largest;
 
@@ -628,6 +746,7 @@ void* myallocate(int size, char* FILE, int LINE, int tid){
 
 
 
+	_printPageTableEntry(myPTE);
 
 	return da_pointer;
 
@@ -648,78 +767,6 @@ void* mydellocate(void* ptr){return 0;}
 
 
 
-/****************************************************************************
-****************************************************************************
-*							DEBUGGING FUNCTIONS
-****************************************************************************
-****************************************************************************/
-
-/**
-*	Private Debugging Function
-* 		Prints a ThrInfo struct
-*/
-void _printThrInfo(ThrInfo* thread){
-	if(!SHOW_PRINTS)
-		return;
-
-	printf(ANSI_COLOR_MAGENTA "ThreadID: %i\tNumBlocks:%i\tNumPages:%i\n" ANSI_COLOR_RESET, \
-		thread->TID, thread->num_blocks, thread->num_pages);
-}
-
-
-/**
-*	Private Debugging Function
-* 		Prints a memEntry header.
-*		Input:  32-bit header as integer. 	
-*			header{	
-*					1:	valid,
-*					1:	isfree,
-*					1:	right_dependent
-*					6:	unused
-*					23:	request size
-*			}
-*
-*/
-void _printMemEntry(int header){
-	if(!SHOW_PRINTS)
-		return;
-    printf(ANSI_COLOR_MAGENTA"ME_header: \t0x%x\t[v: %i | f: %i | rdep: %i | req_size: %i]\n"\
-    	ANSI_COLOR_RESET, header, getValidBitME(header), getIsFreeBitME(header), \
-    	getRightDepBitME(header), getRequestSizeME(header));
-
-}
-
-
-
-
-/**
-*	Private Debugging Function
-* 		Prints a page table entry.
-*		Input:  32-bit entry as integer. 	
-*			entry{	
-*					1:	used,
-*					1:	resident,
-*					1:	left_dep,
-*					1:	right_dep,
-*					1:	dirty,
-*					3:	unused
-*					12:	largest_avail,
-*					12: page_number
-*			}
-*
-*/
-void _printPageTableEntry(int entry){
-	if(!SHOW_PRINTS)
-		return;
-	printf(ANSI_COLOR_MAGENTA"PTEntry: \t%x\t[u:%i |r:%i |ld:%i |rd:%i |d:%i |la:%i |pn: %i]\n" ANSI_COLOR_RESET, \
-		entry, getUsedBitPT(entry), getResidentBitPT(entry), getLeftDependentBitPT(entry), \
-		getRightDependentBitPT(entry), getDirtyBitPT(entry), getLargestAvailable_BitPT(entry), \
-		getPageNumberPT(entry));
-
-}
-
-
-
 
 int main(){
 
@@ -729,19 +776,40 @@ int main(){
 
  
     int i;
-    for(i=0; i<10; i++){
+   //  for(i=0; i<10; i++){
 
-	 	int* x = (int*) myallocate(4, " ", 2, 3);
-	 	*x = i*i*i;
+
+   //  	printf("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
+	 	// int* x = (int*) myallocate(4, " ", 2, 3);
+	 	// *x = i*i*i;
 	 	
-	 	printf("TESTING %i:\t \tpointer = %p, value = %i\n\n",i, x, *x);
+	 	// printf("TESTING %i:\t \tpointer = %p, value = %i\n\n",i, x, *x);
     	
-    }
+   //  }
 
 
-    int* y = (int*) myallocate(PAGE_SIZE-30, " ", 2, 3);
+	// printf("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
+ //    int* y = (int*) myallocate(PAGE_SIZE-30, " ", 2, 3);
+ //    *y = 1237;
 
-    // *y = 3;
+	    printf("A new thread appears!\n");
+    for(i=0; i<3; i++){
+
+		printf("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
+		int* z = (int*) myallocate(30, " ", 2, 4);
+	    *z = 3284;
+	}
+
+ 	int* x = (int*) myallocate(4, " ", 2, 3);
+ 	*x =234;
+
+ 	int* xy = (int*) myallocate(4, " ", 2, 4);
+ 	*xy = i*i*i;
+
+
+ 	int* xdy = (int*) myallocate(4, " ", 2, 5);
+ 	*xdy = i*i*i;
+
 
     return 0;
 
