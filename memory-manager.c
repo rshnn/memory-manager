@@ -762,7 +762,35 @@ void* mydellocate(void* ptr){return 0;}
 
 
 
+int debug_1_simple_allocates_multiple_thread(){
 
+
+    printf(ANSI_COLOR_YELLOW"DEBUG TEST: Simple allocs, multiple threads!\n" ANSI_COLOR_RESET);
+    int i;
+    for(i=0; i<3; i++){
+
+		printf("~~~~~~~~TID=4~~~~~~~~\n");
+		int* z = (int*) myallocate(30, " ", 2, 4);
+	    *z = 3284;
+	}
+
+	printf("~~~~~~~~TID=3~~~~~~~~\n");
+ 	int* x = (int*) myallocate(4, " ", 2, 3);
+ 	*x =234;
+
+
+	printf("~~~~~~~~TID=4~~~~~~~~\n");	
+ 	int* xy = (int*) myallocate(4, " ", 2, 4);
+ 	*xy = i*i*i;
+
+
+	
+	printf("~~~~~~~~TID=5~~~~~~~~\n");
+ 	int* xdy = (int*) myallocate(4, " ", 2, 5);
+ 	*xdy = i*i*i;
+
+ 	return 0;
+}
 
 
 
@@ -770,45 +798,10 @@ void* mydellocate(void* ptr){return 0;}
 
 int main(){
 
-    // fclose(swap_file);
 
-    initMemoryManager();
 
+	debug_1_simple_allocates_multiple_thread();
  
-    int i;
-   //  for(i=0; i<10; i++){
-
-
-   //  	printf("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
-	 	// int* x = (int*) myallocate(4, " ", 2, 3);
-	 	// *x = i*i*i;
-	 	
-	 	// printf("TESTING %i:\t \tpointer = %p, value = %i\n\n",i, x, *x);
-    	
-   //  }
-
-
-	// printf("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
- //    int* y = (int*) myallocate(PAGE_SIZE-30, " ", 2, 3);
- //    *y = 1237;
-
-	    printf("A new thread appears!\n");
-    for(i=0; i<3; i++){
-
-		printf("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
-		int* z = (int*) myallocate(30, " ", 2, 4);
-	    *z = 3284;
-	}
-
- 	int* x = (int*) myallocate(4, " ", 2, 3);
- 	*x =234;
-
- 	int* xy = (int*) myallocate(4, " ", 2, 4);
- 	*xy = i*i*i;
-
-
- 	int* xdy = (int*) myallocate(4, " ", 2, 5);
- 	*xdy = i*i*i;
 
 
     return 0;
