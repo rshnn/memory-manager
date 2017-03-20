@@ -687,12 +687,12 @@ void* scheduler_malloc(int size, int condition){
 	int* currME;
 	int isfree;
 	int seg_size;
-	int offset = PAGE_SIZE;
+	int offset = PAGE_SIZE*2;
 	if(initialized == 0)
 		initMemoryManager();
 	//need to know how many threads we currently have because we wont have space for MAX_THREADS+1-numPages
 	//dont have largest available to know how our memblock currently looks
-	if(condition == 1){//this is to allocate ucontext or scheduler struct stuff into pages Max-2
+	/*if(condition == 1){//this is to allocate ucontext or scheduler struct stuff into pages Max-2
 		currME = memory[PAGES_IN_MEMORY-2];
 		if(book_keeper[PAGES_IN_MEMORY-2].isfree == 1){//set it up
 			book_keeper[PAGES_IN_MEMORY-2].isfree = 0;
@@ -733,8 +733,8 @@ void* scheduler_malloc(int size, int condition){
 			printf("panic\n");
 			return NULL;
 		}	
-	}
-	if(condition == 2){//this is to allocate thread unit stuff into page Max-1
+	}*/
+	//if(condition == 2){//this is to allocate thread unit stuff into page Max-1
 		currME = memory[PAGES_IN_MEMORY-1];
 		if(book_keeper[PAGES_IN_MEMORY-1].isfree == 1){//set it up (just in case)
 			book_keeper[PAGES_IN_MEMORY-1].isfree = 0;
@@ -776,7 +776,7 @@ void* scheduler_malloc(int size, int condition){
 			printf("panic\n");
 			return NULL;
 		}
-	}
+	//}
 	return NULL;	
 	
 }
@@ -1273,32 +1273,28 @@ int debug_2_multiple_page_request(){
 */
 	/* This does not work bc no signal handler for mprotect yet */
 	// printf(ANSI_COLOR_RED"%i\n"ANSI_COLOR_RESET, *a);
-
+	int*a;
+	int*b;
+	int*c;
 
 	printf("~~~~~~~~TID=3~~~~~~~~\n");
 	//myallocate(PAGE_SIZE*4, " ", 3, 3);
 	printf("~~~~~~~~TID=4~~~~~~~~\n");
-	int* a = (int*) scheduler_malloc(4,1);
-	*a = 38;
-	printf(ANSI_COLOR_RED"%i\n"ANSI_COLOR_RESET, *a);
-	printf("~~~~~~~~TID=4~~~~~~~~\n");
 	a = (int*) scheduler_malloc(4,2);
-	*a = 5;
-	printf(ANSI_COLOR_RED"%i\n"ANSI_COLOR_RESET, *a);
-	a = (int*) scheduler_malloc(4,1);
-	*a = 6;
-	printf(ANSI_COLOR_RED"%i\n"ANSI_COLOR_RESET, *a);
-	a = (int*) scheduler_malloc(4,1);
-	*a = 7;
-	printf(ANSI_COLOR_RED"%i\n"ANSI_COLOR_RESET, *a);
-	a = (int*) scheduler_malloc(4,1);
-	*a = 8;
-	printf(ANSI_COLOR_RED"%i\n"ANSI_COLOR_RESET, *a);
-	return 2;
+	*a = 38;
+	printf(ANSI_COLOR_RED"a:%i\n"ANSI_COLOR_RESET, *a);
+	b = (int*) scheduler_malloc(4,2);
+	*b = 5;
+	printf(ANSI_COLOR_RED"a:%i, b:%i\n"ANSI_COLOR_RESET, *a,*b);
+	c = (int*) scheduler_malloc(4,2);
+	*c = 5;
+	printf(ANSI_COLOR_RED"a:%i, b:%i, c:%i\n"ANSI_COLOR_RESET, *a,*b,*c);
+	
+	return 0;
 }
 	
 
-
+/*
 int main(){
 
 
@@ -1310,5 +1306,5 @@ int main(){
 
     return 0;
 
-}
+}*/
 
