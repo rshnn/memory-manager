@@ -33,7 +33,7 @@
 #define THREAD_STACK_SIZE	128					// Stack size defaults to page size
 
 
-#define PRIORITY_LEVELS 	5						// Number of priority levels
+#define PRIORITY_LEVELS 	50						// Number of priority levels
 #define TIME_QUANTUM 		50000 					// 50 ms = 50000 us  
 #define RUNNING_TIME 		100						// Experimental value 
 
