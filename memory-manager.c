@@ -1164,7 +1164,61 @@ void* myallocate(int size, char* FILE, int LINE, int tid){
 }
 
 
-void* mydellocate(void* ptr){return 0;}
+void* mydellocate(void* ptr){
+	//call protect memory to get me an array of PTE's with all pages loaded and unprotected
+	int num_pages = 5;
+	PTEntry* array[num_pages];
+	int* currME;
+	int* nextME;
+	int* prevME;
+	int temp_entry;
+	//int isvalid = getValidBitME(*currME);
+	int	isfree;
+	int prev_seg_size = 0;
+	int next_seg_size = 0;
+	//get currME for left most PTE
+	currME = (array[0]->mem_page_number)*PAGE_SIZE + memory[0]; //address pointing to mementry of leftmost page
+	int curr_seg_size = getRequestSizeME(*currME);
+	//now given the pointer *ptr i can find the mementry that the pointer falls under
+	while((currME+curr_seg_size +4) < (int*)ptr){//jump to next mementry until we find the one corresponding to ptr
+		prev_seg_size = curr_seg_size;
+		currME = currME + curr_seg_size +4;
+		curr_seg_size = getRequestSizeME(*currME);
+	}
+	//i found the mementry
+	temp_entry = initMemEntry(1, 1, 0, curr_seg_size);//set the bit to free
+	memcpy(currME, &temp_entry, sizeof(int));
+	//i have freed the mementry 
+	//now to check the next mementry to free it
+	nextME = currME + curr_seg_size +4;
+	next_seg_size = getRequestSizeME(*nextME);
+	isfree = getIsFreeBitME(*nextME);
+	if(isfree){//next mementry is also free so lets merge
+		temp_entry = initMemEntry(1, 1, 0, curr_seg_size+4+next_seg_size);
+		memcpy(currME, &temp_entry, sizeof(int));
+	}
+	//now check the left mementry
+	if(currME != (array[0]->mem_page_number)*PAGE_SIZE + memory[0]){
+		//then there might be free left mementry
+		curr_seg_size = getRequestSizeME(*currME);
+		prevME = currME-4-curr_seg_size;
+		prev_seg_size = getRequestSizeME(*prevME);
+		isfree = getIsFreeBitME(*prevME);
+		if(isfree){//merge the left with the right one if its free
+			temp_entry = initMemEntry(1, 1, 0, curr_seg_size+4+prev_seg_size);
+			memcpy(prevME, &temp_entry, sizeof(int));
+		}
+	}
+	currME = (array[0]->mem_page_number)*PAGE_SIZE + memory[0];
+	if(getIsFreeBitME(*currME)){
+		//point to first PTE and set pte.largestAvailable to PAGE_SIZE-4
+		//if pte was right dependent then set the next pages to not valid
+	}
+	//TODO update largest available in the PTE or just let the myallocate do it for us
+	return NULL;
+	
+	
+}
 
 
 
@@ -1240,7 +1294,7 @@ int debug_2_multiple_page_request(){
 	a = (int*) scheduler_malloc(4,1);
 	*a = 8;
 	printf(ANSI_COLOR_RED"%i\n"ANSI_COLOR_RESET, *a);
-	return;
+	return 2;
 }
 	
 
