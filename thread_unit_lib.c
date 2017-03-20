@@ -6,7 +6,7 @@
 ************************************************************************************************************/
 
 #include "thread_unit_lib.h"
-
+#include "memory-manager.h"
 
 /************************************************************************************************************
 *
@@ -20,7 +20,7 @@ thread_unit* thread_unit_init(my_pthread_t* pthread){
 
 	thread_unit* tu;
 
-	if ((tu = (thread_unit *)malloc(sizeof(thread_unit))) == NULL){
+	if ((tu = (thread_unit *)myallocate(sizeof(thread_unit), " ", 2, 1)) == NULL){
 		printf("Errno value %d:  Message: %s: Line %d\n", errno, strerror(errno), __LINE__);
 	}
 
@@ -57,7 +57,7 @@ thread_unit_list* thread_list_init(){
 
 	thread_unit_list* thread_list;
 
-	if ((thread_list = (thread_unit_list*)malloc(sizeof(thread_unit_list))) == NULL){
+	if ((thread_list = (thread_unit_list*)myallocate(sizeof(thread_unit_list), " ", 2, 1)) == NULL){
 		printf("Errno value %d:  Message: %s: Line %d\n", errno, strerror(errno), __LINE__);
 	}
 

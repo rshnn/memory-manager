@@ -139,7 +139,8 @@ void scheduler_runThread(thread_unit* thread, thread_unit* prev){
 }
 
 
-void scheduler_sig_handler(int sig){
+void scheduler_sig_handler(){
+
 
 	if(SYS_MODE == 1){
 		printf("NEGATE SIGARLM: In the middle of a scheduler/pthread call.\n");
@@ -161,16 +162,6 @@ void scheduler_sig_handler(int sig){
     
 
     my_pthread_yield();
-}
-
-void sig_handler(int sig, siginfo_t* si, void* ptr){
-
-	printf(ANSI_COLOR_GREEN "\nSIGSEGV\tThread accessing protected memory.\n" ANSI_COLOR_RESET);
-
-	int* addr = si->si_addr;
-	int tid = get_pthread_id();
-
-	protectmemory(tid, addr);
 }
 
 
@@ -331,9 +322,6 @@ void maintenance_cycle(){
 	}
 }
 
-int get_pthread_id(){
-	return scheduler->currently_running->thread->threadID;	
-}
 
 void scheduler_init(){
 
@@ -345,7 +333,7 @@ void scheduler_init(){
 	SYS_MODE = 1;
 
 	/* Malloc space for scheduler */
-	if ((scheduler = (scheduler_t*)scheduler_malloc(sizeof(scheduler_t), 2)) == NULL){
+	if ((scheduler = (scheduler_t*)myallocate(sizeof(scheduler_t), " ", 2, 1)) == NULL){
 		printf("Errno value %d:  Message: %s: Line %d\n", errno, strerror(errno), __LINE__);
 	}
 
@@ -365,12 +353,12 @@ void scheduler_init(){
 		SETUP THREAD_UNITS FOR MAINTENANCE AND MAIN THREADS   
     **********************************************************************************/
 
-	if((main_thread_unit = (thread_unit*)scheduler_malloc(sizeof(thread_unit), 2)) == NULL){
+	if((main_thread_unit = (thread_unit*)myallocate(sizeof(thread_unit), " ", 2, 1)) == NULL){
 		printf("Errno value %d:  Message: %s: Line %d\n", errno, strerror(errno), __LINE__);
-		exit(-1);		
+		exit(-1);
 	}
 
-	if((maintenance_thread_unit = (thread_unit*)scheduler_malloc(sizeof(thread_unit), 2)) == NULL){
+	if((maintenance_thread_unit = (thread_unit*)myallocate(sizeof(thread_unit), " ", 2, 1)) == NULL){
 		printf("Errno value %d:  Message: %s: Line %d\n", errno, strerror(errno), __LINE__);
 		exit(-1);		
 	}
@@ -383,7 +371,7 @@ void scheduler_init(){
 	main_thread_unit->next = NULL;
 	main_thread_unit->priority = 0;
 
-	main_thread_unit->thread = (my_pthread_t*)myallocate(sizeof(my_pthread_t), " ", 2, 1);
+	main_thread_unit->thread = (my_pthread_t*)malloc(sizeof(my_pthread_t));
 	main_thread_unit->thread->threadID = 1;
 	main_thread_unit->thread->priority = 0;
 	main_thread_unit->thread->thread_unit = main_thread_unit;
@@ -393,7 +381,7 @@ void scheduler_init(){
 	/* MAIN UCONTEXT SETUP */
 
 	/* Attempt to malloc space for main_ucontext */
-	if ((main_thread_unit->ucontext = (ucontext_t*)scheduler_malloc(sizeof(ucontext_t), 1)) == NULL){
+	if ((main_thread_unit->ucontext = (ucontext_t*)malloc(sizeof(ucontext_t))) == NULL){
 		printf("Errno value %d:  Message: %s: Line %d\n", errno, strerror(errno), __LINE__);
 		exit(-1);
 	}
@@ -404,7 +392,7 @@ void scheduler_init(){
 	} 
 	/* Set up ucontext stack */
 	main_thread_unit->ucontext->uc_stack.ss_sp 		= main_thread_unit->stack;
-	main_thread_unit->ucontext->uc_stack.ss_size 	= PAGE_SIZE;
+	main_thread_unit->ucontext->uc_stack.ss_size 	= PAGE_SIZE_THREAD;
 	/* Set uc_link to point to addr of main_ucontext */
 	main_thread_unit->ucontext->uc_link 			= main_thread_unit->ucontext;
 	/* Assign func* to ucontext */
@@ -415,7 +403,7 @@ void scheduler_init(){
 	/* MAINTENANCE UCONTEXT SETUP */
 
 	/* Attempt to malloc space for maintenance_ucontext */
-	if ((maintenance_thread_unit->ucontext = (ucontext_t*)scheduler_malloc(sizeof(ucontext_t), 1)) == NULL){
+	if ((maintenance_thread_unit->ucontext = (ucontext_t*)malloc(sizeof(ucontext_t))) == NULL){
 		printf("Errno value %d:  Message: %s: Line %d\n", errno, strerror(errno), __LINE__);
 		exit(-1);
 	}
@@ -427,7 +415,7 @@ void scheduler_init(){
 	} 
 	/* Set up ucontext stack */
 	maintenance_thread_unit->ucontext->uc_stack.ss_sp 	= maintenance_thread_unit->stack;	
-	maintenance_thread_unit->ucontext->uc_stack.ss_size 	= PAGE_SIZE;
+	maintenance_thread_unit->ucontext->uc_stack.ss_size 	= PAGE_SIZE_THREAD;
 	/* Set uc_link to point to addr of maintenance_ucontext */
 	maintenance_thread_unit->ucontext->uc_link 			= main_thread_unit->ucontext;
 	/* Assign func* to ucontext */
@@ -463,12 +451,6 @@ void scheduler_init(){
 	// 	exit(EXIT_FAILURE);
 	// }
 
-	/* Direct SIGSEGV to scheduler_sig_handler */
-	struct sigaction s;
-	s.sa_flags = SA_SIGINFO|SA_RESETHAND;
-	s.sa_sigaction = sig_handler;
-	sigemptyset(&s.sa_mask);
-	sigaction(SIGSEGV, &s, 0);
 
 	/* Direct sig-alarms to scheduler_sig_handler */
 	signal(SIGALRM, &scheduler_sig_handler);
@@ -529,11 +511,11 @@ int my_pthread_create( my_pthread_t * thread, my_pthread_attr_t * attr, void *(*
 	} 
 
 	/* Set up ucontext stack */
-	// if((new_unit->ucontext->uc_stack.ss_sp = malloc(PAGE_SIZE))==NULL){
+	// if((new_unit->ucontext->uc_stack.ss_sp = malloc(PAGE_SIZE_THREAD))==NULL){
 	// 	printf("Errno value %d:  Message: %s: Line %d\n", errno, strerror(errno), __LINE__);
 	// }
 	new_unit->ucontext->uc_stack.ss_sp 	= new_unit->stack;
-	new_unit->ucontext->uc_stack.ss_size 	= PAGE_SIZE;
+	new_unit->ucontext->uc_stack.ss_size 	= PAGE_SIZE_THREAD;
 
 	/* Set uc_link to point to addr of scheduler's ucontext */
 	new_unit->ucontext->uc_link 			= maintenance_thread_unit->ucontext;
@@ -605,8 +587,6 @@ void my_pthread_yield(){
 		// End of running queue.  Run maint cycle.
 		maintenance_cycle(); 
 	}
-
-	blockmemory();
 
 	if(!thread_list_isempty(scheduler->running)){
 
@@ -960,7 +940,7 @@ void f2(int x){
 	printf("\tf2 completes execution.\n");
 
 	char* a;
-	a = (char*) myallocate(sizeof(char), " ", 2, 5);
+	a = (char*) malloc(sizeof(char));
 
     strcpy(a,"hello world");
     my_pthread_exit((void*)a);
@@ -1026,9 +1006,12 @@ void test_function(int num){
 	
 	int NUM_PTHREADS = num;
 
+	initMemoryManager();
+	scheduler_init();
+
 
 	// my_pthread_t pthread_array[NUM_PTHREADS];
-	my_pthread_t* pthread_array = (my_pthread_t*)malloc(NUM_PTHREADS * sizeof(my_pthread_t));
+	my_pthread_t* pthread_array = (my_pthread_t*)myallocate(NUM_PTHREADS * sizeof(my_pthread_t), " ", 2, 1);
 	my_pthread_attr_t* useless_attr;
 	my_pthread_mutexattr_t* useless_mattr;
 
@@ -1059,21 +1042,15 @@ void test_function(int num){
 		
 	} 
 
-
-
 	/* Main joins all pthreads */
 	for(i=0; i<NUM_PTHREADS;i++){
 		my_pthread_join(pthread_array[i], NULL);
 	}	
 	// my_pthread_join(pthread_array[NUM_PTHREADS-1], NULL);
 	
-
-
-
   	gettimeofday(&end, NULL);
 
   	long int total_time = (end.tv_sec*1000000 + end.tv_usec) - (start.tv_sec * 1000000 + start.tv_usec);
-
 
 	
 	if((test_counter1 + test_counter2) == num){

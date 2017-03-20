@@ -30,10 +30,10 @@
 #define ANSI_COLOR_CYAN    "\x1b[36m"
 #define ANSI_COLOR_RESET   "\x1b[0m"
 
-#define PAGE_SIZE 			4096					// Stack size defaults to page size
+#define PAGE_SIZE_THREAD 	128					// Stack size defaults to page size
 
 
-#define PRIORITY_LEVELS 	50						// Number of priority levels
+#define PRIORITY_LEVELS 	2						// Number of priority levels
 #define TIME_QUANTUM 		50000 					// 50 ms = 50000 us  
 #define RUNNING_TIME 		100						// Experimental value 
 
@@ -140,7 +140,7 @@ typedef struct thread_unit_ {
 	int                 		run_count;
 	int 						priority;
     long int					joinedID;
-    char						stack[PAGE_SIZE];
+    char						stack[PAGE_SIZE_THREAD];
 
     struct thread_unit_* 		next;
     struct thread_unit_list_* 	waiting_on_me;
@@ -221,6 +221,7 @@ void my_pthread_exit(void *value_ptr);
 int my_pthread_join(my_pthread_t thread, void **value_ptr);
 
 
+
 /* my_pthread mutex library */
 int my_pthread_mutex_init(my_pthread_mutex_t *mutex, const my_pthread_mutexattr_t *mutexattr);
 int my_pthread_mutex_lock(my_pthread_mutex_t *mutex);
@@ -234,9 +235,7 @@ void resetTheTimer();
 /* scheduler library */
 void scheduler_init();
 void scheduler_sig_handler();
-void sig_handler();
 void priority_level_sort();
-int get_pthread_id();
 
 
 #endif

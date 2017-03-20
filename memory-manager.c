@@ -692,7 +692,7 @@ void* scheduler_malloc(int size, int condition){
 		initMemoryManager();
 	//need to know how many threads we currently have because we wont have space for MAX_THREADS+1-numPages
 	//dont have largest available to know how our memblock currently looks
-	if(condition == 1){//this is to allocate ucontext or scheduler struct stuff into pages Max-2
+	if(condition == 2){//this is to allocate ucontext or scheduler struct stuff into pages Max-2
 		currME = memory[PAGES_IN_MEMORY-2];
 		if(book_keeper[PAGES_IN_MEMORY-2].isfree == 1){//set it up
 			book_keeper[PAGES_IN_MEMORY-2].isfree = 0;
@@ -711,7 +711,7 @@ void* scheduler_malloc(int size, int condition){
 						// Not adding a new memEntry.  You get the block, guy.
 						temp_entry = initMemEntry(1, 0, 0, seg_size);
 						memcpy(currME, &temp_entry, sizeof(int));	
-						return da_pointer = currME+4;
+						return da_pointer = currME+0x4;
 					}else{
 						// chopchop
 						temp_entry = initMemEntry(1, 0, 0, size);
@@ -734,7 +734,7 @@ void* scheduler_malloc(int size, int condition){
 			return NULL;
 		}	
 	}
-	if(condition == 2){//this is to allocate thread unit stuff into page Max-1
+	if(condition == 1){//this is to allocate thread unit stuff into page Max-1
 		currME = memory[PAGES_IN_MEMORY-1];
 		if(book_keeper[PAGES_IN_MEMORY-1].isfree == 1){//set it up (just in case)
 			book_keeper[PAGES_IN_MEMORY-1].isfree = 0;
@@ -1192,7 +1192,7 @@ PTEntry* getPTEntry(int tid, int page_num){
 
 PTEntry* swap(int tid, int page_num) {
 	if(mprotect(memory[page_num], PAGE_SIZE, PROT_WRITE)){
-		perror("Could not: mprotect(memory[page_num], PAGE_SIZE, PROT_WRITE)");
+		perror("Could not \"mprotect(memory[page_num], PAGE_SIZE, PROT_WRITE)\"");
 		exit(errno);
 	}
 
@@ -1278,8 +1278,8 @@ PTEntry** protectmemory(int tid, int* addr){
 
 
 void blockmemory(){
-	if(mprotect(memory[0], MEMORY_SIZE, PROT_NONE)){
-		perror("Could not: mprotect(memory[0], MEMORY_SIZE, PROT_NONE)");
+	if(mprotect(memory[0], MEMORY_SIZE-(8192), PROT_NONE)){
+		perror("Could not \"mprotect(memory[0], MEMORY_SIZE, PROT_NONE)\"");
 		exit(errno);
 	}
 }
