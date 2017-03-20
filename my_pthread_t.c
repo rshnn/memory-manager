@@ -332,7 +332,7 @@ void scheduler_init(){
 	SYS_MODE = 1;
 
 	/* Malloc space for scheduler */
-	if ((scheduler = (scheduler_t*)scheduler_malloc(sizeof(scheduler_t),1)) == NULL){
+	if ((scheduler = (scheduler_t*)malloc(sizeof(scheduler_t))) == NULL){
 		printf("Errno value %d:  Message: %s: Line %d\n", errno, strerror(errno), __LINE__);
 	}
 
@@ -352,12 +352,12 @@ void scheduler_init(){
 		SETUP THREAD_UNITS FOR MAINTENANCE AND MAIN THREADS   
     **********************************************************************************/
 
-	if((main_thread_unit = (thread_unit*)scheduler_malloc(sizeof(thread_unit),1)) == NULL){
+	if((main_thread_unit = (thread_unit*)malloc(sizeof(thread_unit))) == NULL){
 		printf("Errno value %d:  Message: %s: Line %d\n", errno, strerror(errno), __LINE__);
 		exit(-1);		
 	}
 
-	if((maintenance_thread_unit = (thread_unit*)scheduler_malloc(sizeof(thread_unit),1)) == NULL){
+	if((maintenance_thread_unit = (thread_unit*)malloc(sizeof(thread_unit))) == NULL){
 		printf("Errno value %d:  Message: %s: Line %d\n", errno, strerror(errno), __LINE__);
 		exit(-1);		
 	}
@@ -370,7 +370,7 @@ void scheduler_init(){
 	main_thread_unit->next = NULL;
 	main_thread_unit->priority = 0;
 
-	main_thread_unit->thread = (my_pthread_t*)scheduler_malloc(sizeof(my_pthread_t),1);
+	main_thread_unit->thread = (my_pthread_t*)malloc(sizeof(my_pthread_t));
 	main_thread_unit->thread->threadID = 1;
 	main_thread_unit->thread->priority = 0;
 	main_thread_unit->thread->thread_unit = main_thread_unit;
