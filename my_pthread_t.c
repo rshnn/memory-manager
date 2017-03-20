@@ -380,7 +380,7 @@ void scheduler_init(){
 	/* MAIN UCONTEXT SETUP */
 
 	/* Attempt to malloc space for main_ucontext */
-	if ((main_thread_unit->ucontext = (ucontext_t*)scheduler_malloc(sizeof(ucontext_t),1)) == NULL){
+	if ((main_thread_unit->ucontext = (ucontext_t*)malloc(sizeof(ucontext_t))) == NULL){
 		printf("Errno value %d:  Message: %s: Line %d\n", errno, strerror(errno), __LINE__);
 		exit(-1);
 	}
@@ -402,7 +402,7 @@ void scheduler_init(){
 	/* MAINTENANCE UCONTEXT SETUP */
 
 	/* Attempt to malloc space for maintenance_ucontext */
-	if ((maintenance_thread_unit->ucontext = (ucontext_t*)scheduler_malloc(sizeof(ucontext_t),1)) == NULL){
+	if ((maintenance_thread_unit->ucontext = (ucontext_t*)malloc(sizeof(ucontext_t))) == NULL){
 		printf("Errno value %d:  Message: %s: Line %d\n", errno, strerror(errno), __LINE__);
 		exit(-1);
 	}
