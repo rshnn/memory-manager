@@ -23,7 +23,7 @@ debug:
 	make DEBUG=TRUE
 
 clean: 
-	rm -f $(TARGET) pthread_test
+	rm -f $(TARGET) pthread_test swagmaster.swp
 
 rebuild:
 	rm -f $(TARGET)
